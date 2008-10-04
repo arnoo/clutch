@@ -18,7 +18,6 @@
 (set-macro-character #\] (get-macro-character #\) nil))
 
 
-
 ;*** in ala python ***
 (defun in (seq elmt)
 	"does seq contain elmt ?"
@@ -78,11 +77,3 @@
 		(if (> step 0)
 			(loop for x from start to end by step collect x)		
 			(loop for x from start downto end by (- step) collect x))))
-
-(defun db (statement &optional format-params)
-	(format statement format-params)
-)
-
-(defun db-insert (table hash)
-	(maphash [])
-)
