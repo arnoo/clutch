@@ -77,3 +77,17 @@
 		(if (> step 0)
 			(loop for x from start to end by step collect x)		
 			(loop for x from start downto end by (- step) collect x))))
+
+
+; Shawn Betts's slurp http://www.emmett.ca/~sabetts/slurp.html
+(defun slurp (stream)
+  (let ((seq (make-array (file-length stream) :element-type 'character :fill-pointer t)))
+    (setf (fill-pointer seq) (read-sequence seq stream))
+      seq))
+
+; Reads a file/stream entirely then closes it and returns the contents as a string
+(defun glob (file-or-stream)
+  (if (streamp file-or-stream)
+      (with-open-stream (s file-or-stream) (slurp s))
+      (with-open-file   (s file-or-stream) (slurp s)))
+  )
