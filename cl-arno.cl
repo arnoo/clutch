@@ -1,6 +1,6 @@
 (require 'cl-ppcre)
 
-; **** Lambda expressions ala Arc ***
+; **** Lambda expressions ala Arc by Brad Ediger ***
 ;CL-USER> ([+ 1 _] 10)
 ;11
 ;CL-USER> ([+ _ __] 1 2)
@@ -37,6 +37,16 @@
 
 (defmacro awith (expr &body body)
 	`(let ((it ,expr)) ,@body))
+
+
+; *** Paul Graham's anaphoric function from arc ***
+; CL version from http://setagaya.googlecode.com/svn-history/r25/trunk/home/mc/arc-compat/anaphoric-op.lisp
+(defmacro afn (parms &body body)
+    "Creates an anaphoric function, which can be called recursively
+  with the name self. This allows a recursive function to be
+  created without assigning it a name."
+    `(labels ((self ,parms ,@body))
+                  #'self))
 
 (defun vector-to-list* (object)
   (let ((result (list nil))
@@ -91,3 +101,12 @@
       (with-open-stream (s file-or-stream) (slurp s))
       (with-open-file   (s file-or-stream) (slurp s)))
   )
+
+; attempt at arc like function compose. Not so good / useful ? 
+;(defun compose-reader (stream char)
+;  (declare (ignore char))
+;    (prog1 (read-delimited-list #\) stream t) (unread-char #\) stream)))
+;     (list (read stream t nil t) (read stream t nil t)))
+
+;(set-macro-character #\! #'compose-reader)
+
