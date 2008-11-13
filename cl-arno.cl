@@ -18,6 +18,7 @@
   ; not just [+ 1 _ ].
 (set-macro-character #\] (get-macro-character #\) nil))
 
+
 ;*** in ala python ***
 (defun in (seq elmt)
 	"does seq contain elmt ?"
@@ -26,16 +27,19 @@
 
 ; *** Paul Graham's anaphoric if (cf. On Lisp) ***
 (defmacro aif (test-form then-form &optional else-form)
+  "Executes <body> with <it> bound to <expr> if <expr> is not nil"
 	`(let ((it ,test-form)) 
 		(if it ,then-form ,else-form)))
 
 
 ; *** Paul Graham's anaphoric while (cf. On Lisp) ***
 (defmacro awhile (expr &body body) 
+  "Executes <body> with <it> bound to <expr> as long as <expr> is not nil"
 	`(do ((it ,expr ,expr)) ((not it)) ,@body))
 
 
 (defmacro awith (expr &body body)
+  "Executes <body> with <it> bound to <expr>"
 	`(let ((it ,expr)) ,@body))
 
 
@@ -61,12 +65,26 @@
 
 ;*** Regexp match ala Perl ***
 (defun ~ (re string-or-list)
+  "If <string-or-list> is a string:
+    returns nil if regular expression <re> does not match the string
+    returns the part of the string that matches <re> and all grouped matches ()
+   if <string-or-list> is a list
+    returns the elements of that list that match <re>
+    
+    example : (re \"\w+(\d)\" \"ab2cc\")"
   (if (listp string-or-list)
       (remove-if-not [cl-ppcre::scan re _] string-or-list)
       (let ((m (multiple-value-list (cl-ppcre::scan-to-strings re string-or-list))))
            (if (nth 1 m) (cons (car m) (vector-to-list* (cadr m))) nil))))
 
 (defun !~ (re string-or-list)
+  "If <string-or-list> is a string:
+    returns nil if <re> matches the string
+    returns the string if <re> does not match
+   if <string-or-list> is a list
+    returns the elements of that list that do not match <re>
+    
+    example: (!~ \"\w{3}\" (list \"aaa\" \"bb\" \"ccc\"))"
   (if (listp string-or-list)
       (remove-if [cl-ppcre::scan re _] string-or-list)
       (if (not (cl-ppcre::scan re string-or-list))
@@ -74,6 +92,8 @@
 
 ;*** Regexp substitution ala Perl (or nearly...) ***
 (defun ~s (re replacement string &optional flags)
+  "Replaces all substrings that match <re> in <string> by <replacement>.
+  <flags> can contain Perl regexp flags like g"
 	(values
 		(if (in flags #\g)
 			(cl-ppcre::regex-replace-all re string replacement)
@@ -84,10 +104,16 @@
 
 ;*** x a la perl/python/ruby *** TODO : rendre universel pour tout type de sequence
 (defun x (string number)
+  "returns a string composed of <number> times <string>"
   (if (> number 1) (concatenate 'string string (x string (- number 1)))
       (if (<= number 0) "" string)))
 
 (defmacro foreach (list &rest body)
+  "Executes body for each element of <list>, with:
+    <it>               bound to the current element
+    <its-index>        bound to its index in the list,
+    <its-rank>         bound to its rank in the list (its-index+1)
+    <the-previous-one> bound to the previous element (nil if the current index is 0)"
   `(let ((number-of-elements (length ,list))) 
      (loop for i from 0 below (length ,list) do
         (let ((it         (nth i ,list))
@@ -114,6 +140,7 @@
 ; Reads a url/file/stream entirely then closes it and returns the contents as a string
 ; based on Shawn Betts's slurp http://www.emmett.ca/~sabetts/slurp.html
 (defun glob (path-or-stream)
+  "Globs the whole provided file, url or stream into a string or into a byte array if some bytes cannot be decoded to characters"
   (if (streamp path-or-stream)
       (with-open-stream (s path-or-stream)
                         (with-output-to-string (out)
@@ -144,15 +171,19 @@
     t))
 
 (defun glob-lines (path-or-stream)
+  "Globs the whole provided file, url or stream into an array of its lines"
   (resplit "\\r\\n|\\n" (glob path-or-stream)))
 
 (defun lc (string)
+  "Converts a string to lowercase (shortcut for string-downcase)"
   (string-downcase string))
 
 (defun uc (string)
+  "Converts a string to uppercase (shortcut for string-upcase)"
   (string-upcase string))  
 
 (defun pos (&rest args)
+  "Shortcut for position"
   (apply #'position args))  
 
 ; mkstr by P.G. (On Lisp)
@@ -167,12 +198,3 @@
 ; symb by P.G. (On Lisp)
 (defun symb (&rest args)
   (values (intern (apply #'mkstr args))))
-
-; attempt at arc like function compose. Not so good / useful ? 
-;(defun compose-reader (stream char)
-;  (declare (ignore char))
-;    (prog1 (read-delimited-list #\) stream t) (unread-char #\) stream)))
-;     (list (read stream t nil t) (read stream t nil t)))
-
-;(set-macro-character #\! #'compose-reader)
-
