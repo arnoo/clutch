@@ -1,6 +1,9 @@
 (require 'cl-ppcre)
 (require 'drakma)
 
+(export 'import-forced)
+
+
 ; **** Lambda expressions ala Arc by Brad Ediger ***
 ;CL-USER> ([+ 1 _] 10)
 ;11
@@ -9,15 +12,15 @@
 
 (defun square-bracket-reader (stream char)
   (declare (ignore char))
-  `(lambda (&optional _ __)
-    (declare (ignorable _ __)) ; don't warn about unused variables
-    ,(read-delimited-list #\] stream t)))
+  `(lambda (&optional ,(intern "_") ,(intern "__"))
+           (declare (ignorable ,(intern "_") ,(intern "__")))
+           ,(read-delimited-list #\] stream t)))
 
-(set-macro-character #\[ #'square-bracket-reader)
-  ; Make ] behave like ) to the reader so that [+ 1 _] works,
-  ; not just [+ 1 _ ].
-(set-macro-character #\] (get-macro-character #\) nil))
+(defun enable-arc-lambdas ()
+  (set-macro-character #\[ #'square-bracket-reader)
+  (set-macro-character #\] (get-macro-character #\) nil)))
 
+(enable-arc-lambdas)
 
 ;*** in ala python ***
 (defun in (seq elmt)
@@ -40,7 +43,8 @@
 
 (defmacro awith (expr &body body)
   "Executes <body> with <it> bound to <expr>"
-	`(let ((it ,expr)) ,@body))
+	`(let ((it ,eifxpr)) ,@body))
+
 
 
 ; *** Paul Graham's anaphoric function from arc ***
@@ -77,6 +81,7 @@
       (let ((m (multiple-value-list (cl-ppcre::scan-to-strings re string-or-list))))
            (if (nth 1 m) (cons (car m) (vector-to-list* (cadr m))) nil))))
 
+
 (defun !~ (re string-or-list)
   "If <string-or-list> is a string:
     returns nil if <re> matches the string
@@ -90,6 +95,7 @@
       (if (not (cl-ppcre::scan re string-or-list))
           string-or-list)))
 
+
 ;*** Regexp substitution ala Perl (or nearly...) ***
 (defun ~s (re replacement string &optional flags)
   "Replaces all substrings that match <re> in <string> by <replacement>.
@@ -99,8 +105,10 @@
 			(cl-ppcre::regex-replace-all re string replacement)
 			(cl-ppcre::regex-replace re string replacement))))
 
+
 (defun resplit (re string)
   (cl-ppcre:split re string))
+
 
 ;*** x a la perl/python/ruby *** TODO : rendre universel pour tout type de sequence
 (defun x (string number)
@@ -108,18 +116,22 @@
   (if (> number 1) (concatenate 'string string (x string (- number 1)))
       (if (<= number 0) "" string)))
 
+
 (defmacro foreach (list &rest body)
   "Executes body for each element of <list>, with:
     <it>               bound to the current element
     <its-index>        bound to its index in the list,
     <its-rank>         bound to its rank in the list (its-index+1)
-    <the-previous-one> bound to the previous element (nil if the current index is 0)"
+    <the-previous-one> bound to the previous element (nil if the current index is 0)
+    <number-of-elements> bound to the length of <list>"
   `(let ((number-of-elements (length ,list))) 
-     (loop for i from 0 below (length ,list) do
+     (declare (ignorable number-of-elements))
+     (loop for i from 0 below (length ,list) collect
         (let ((it         (nth i ,list))
               (its-index  i)
               (the-previous-one (if (> i 0) (nth (- i 1) ,list)))
               (its-rank   (+ 1 i)))
+           (declare (ignorable it its-index the-previous-one its-rank))
            (progn ,@body)))))
 
 ; *** Range nearly ala Python (in Python, end is not included) ***
@@ -162,6 +174,7 @@
                      (setf (fill-pointer seq) (read-sequence seq s))
                      seq)))))))
 
+
 (defun unglob (filename sequence)
   (progn
     (with-open-file (stream filename
@@ -170,31 +183,69 @@
       (write-sequence sequence stream))
     t))
 
+
 (defun glob-lines (path-or-stream)
   "Globs the whole provided file, url or stream into an array of its lines"
   (resplit "\\r\\n|\\n" (glob path-or-stream)))
+
 
 (defun lc (string)
   "Converts a string to lowercase (shortcut for string-downcase)"
   (string-downcase string))
 
+
 (defun uc (string)
   "Converts a string to uppercase (shortcut for string-upcase)"
   (string-upcase string))  
 
+
 (defun pos (&rest args)
   "Shortcut for position"
   (apply #'position args))  
+
 
 ; mkstr by P.G. (On Lisp)
 (defun mkstr (&rest args)
   (with-output-to-string (s)
      (dolist (a args) (princ a s))))
 
+
 ; reread by P.G. (On Lisp)
 (defun reread (&rest args)
   (values (read-from-string (apply #'mkstr args))))
 
+
 ; symb by P.G. (On Lisp)
 (defun symb (&rest args)
   (values (intern (apply #'mkstr args))))
+
+(export 'symb)
+
+(defmacro import-forced (&rest symbols-as-strings)
+  (let ((ourpackage (package-name *package*)))
+       `(progn
+           ,@(foreach symbols-as-strings
+             (let* ((elts (~ "^(.+):(.+)$" it))
+                     (zepackage (cadr elts))
+                     (zesymbol (caddr elts)))
+                    `(progn (in-package ,(read-from-string (mkstr ":" zepackage)))
+                      (export (read-from-string ,zesymbol))
+                      (in-package ,(read-from-string (mkstr ":" ourpackage)))
+                      (import (read-from-string ,(mkstr zepackage ":" zesymbol)))))))))
+
+(defmacro def-view-class-with-accessors-and-initargs (name superclasses slots &rest class-options)
+  `(clsql:def-view-class
+      ,name
+      ,superclasses
+      ,(mapcar [append _ `(:accessor ,(symb (symbol-name name) "-" (symbol-name (car _))) :initarg ,(reread ":" (symbol-name  (car _))))] slots)
+      ,class-options))
+
+(defun select (object &key where order-by)
+    (mapcar #'car (reduce #'append (mapcar [clsql:select _ :where (clsql-sys::generate-sql-reference where) :order-by (clsql-sys::generate-sql-reference order-by)] (if (listp object) object (list object))))))
+
+(defmacro template (file values)
+    `(let ((s (make-string-output-stream)))
+                    (html-template:fill-and-print-template ,file ,values :stream s)
+                              (get-output-stream-string s)))
+
+(export (list 'select 'template 'square-bracket-reader 'in 'aif 'awhile 'range 'awith 'afn '~ '~s 'x '!~ 'resplit 'reread 'mkstr 'pos 'foreach 'glob-lines 'glob 'unglob 'lc 'uc 'symb 'import-forced 'def-view-class-with-accessors-and-initargs))
