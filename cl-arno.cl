@@ -1,8 +1,3 @@
-(require 'cl-ppcre)
-(require 'drakma)
-
-(export 'import-forced)
-
 
 ; **** Lambda expressions ala Arc by Brad Ediger ***
 ;CL-USER> ([+ 1 _] 10)
@@ -34,6 +29,11 @@
 	`(let ((it ,test-form)) 
 		(if it ,then-form ,else-form)))
 
+; *** Paul Graham's anaphoric when (cf. On Lisp) ***
+(defmacro awhen (test-form &rest then-forms)
+  "Executes <body> with <it> bound to <expr> if <expr> is not nil"
+	`(let ((it ,test-form)) 
+		(when it ,@then-forms)))
 
 ; *** Paul Graham's anaphoric while (cf. On Lisp) ***
 (defmacro awhile (expr &body body) 
@@ -247,5 +247,3 @@
     `(let ((s (make-string-output-stream)))
                     (html-template:fill-and-print-template ,file ,values :stream s)
                               (get-output-stream-string s)))
-
-(export (list 'select 'template 'square-bracket-reader 'in 'aif 'awhile 'range 'awith 'afn '~ '~s 'x '!~ 'resplit 'reread 'mkstr 'pos 'foreach 'glob-lines 'glob 'unglob 'lc 'uc 'symb 'import-forced 'def-view-class-with-accessors-and-initargs))
