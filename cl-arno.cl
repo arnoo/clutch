@@ -1,3 +1,7 @@
+(require 'cl-ppcre)
+(require 'drakma)
+(require 'clsql)
+(require 'html-template)
 
 ; **** Lambda expressions ala Arc by Brad Ediger ***
 ;CL-USER> ([+ 1 _] 10)
@@ -68,18 +72,20 @@
 
 
 ;*** Regexp match ala Perl ***
-(defun ~ (re string-or-list)
+(defun ~ (re string-or-list &optional match-nb)
   "If <string-or-list> is a string:
     returns nil if regular expression <re> does not match the string
     returns the part of the string that matches <re> and all grouped matches ()
+    if <match-nb> is not nil, only match number <match-nb> will be returned
    if <string-or-list> is a list
     returns the elements of that list that match <re>
     
     example : (re \"\w+(\d)\" \"ab2cc\")"
   (if (listp string-or-list)
       (remove-if-not [cl-ppcre::scan re _] string-or-list)
-      (let ((m (multiple-value-list (cl-ppcre::scan-to-strings re string-or-list))))
-           (if (nth 1 m) (cons (car m) (vector-to-list* (cadr m))) nil))))
+      (apply (if match-nb [nth match-nb _] #'identity)
+        (list (let ((m (multiple-value-list (cl-ppcre::scan-to-strings re string-or-list))))
+          (if (nth 1 m) (cons (car m) (vector-to-list* (cadr m))) nil))))))
 
 
 (defun !~ (re string-or-list)
@@ -247,3 +253,11 @@
     `(let ((s (make-string-output-stream)))
                     (html-template:fill-and-print-template ,file ,values :stream s)
                               (get-output-stream-string s)))
+;flatten (On Lisp)
+(defun flatten (x)
+  (labels ((rec (x acc)
+                (cond ((null x) acc)
+                      ((atom x) (cons x acc))
+                      (t (rec (car x) (rec (cdr x) acc))))))
+          (rec x nil)))
+
