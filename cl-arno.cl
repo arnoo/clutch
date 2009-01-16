@@ -97,6 +97,16 @@
       (declare (fixnum index))
       (rplacd splice (list (aref object index))))))
 
+(defun parse-re (re)
+  (let ((result (list "")))
+       (loop for i from 1 below (length re)
+             do (if (and (char= (elt re i) #\/) (char/= (elt re (- i 1)) (elt "\\" 0))) 
+                    (push "" result)
+                    (setf (car result) (mkstr (car result) (elt re i)))))
+       (when (< (length result) 3) (push (car result) result) (setf (cadr result) ""))
+       (if (char/= (elt re 0) #\/) (setf (car result) (mkstr (elt re 0) (car result))))
+       (if (in (car result) #\i) (setf (caddr result) (mkstr "(?i)" (caddr result))))
+       (reverse result)))
 
 ;*** Regexp match ala Perl ***
 (defun ~ (re string-or-list &optional match-nb)
@@ -110,6 +120,7 @@
     example : (re \"\w+(\d)\" \"ab2cc\")"
     (declare (optimize debug))
   (destructuring-bind (regexp subre flags) (parse-re re)
+    (declare (ignorable subre))
     (if (listp string-or-list)
         (remove-if-not [cl-ppcre:scan regexp _] string-or-list)
         (let ((match-indexes (cl-ppcre:all-matches regexp string-or-list)))
@@ -131,21 +142,11 @@
     
     example: (!~ \"\w{3}\" (list \"aaa\" \"bb\" \"ccc\"))"
   (destructuring-bind (regexp subre flags) (parse-re re)
+    (declare (ignorable subre flags))
     (if (listp string-or-list)
         (remove-if [cl-ppcre::scan regexp _] string-or-list)
         (if (not (cl-ppcre::scan regexp string-or-list))
             string-or-list))))
-
-(defun parse-re (re)
-  (let ((result (list "")))
-       (loop for i from 1 below (length re)
-             do (if (and (char= (elt re i) #\/) (char/= (elt re (- i 1)) (elt "\\" 0))) 
-                    (push "" result)
-                    (setf (car result) (mkstr (car result) (elt re i)))))
-       (when (< (length result) 3) (push (car result) result) (setf (cadr result) ""))
-       (if (char/= (elt re 0) #\/) (setf (car result) (mkstr (elt re 0) (car result))))
-       (if (in (car result) #\i) (setf (caddr result) (mkstr "(?i)" (caddr result))))
-       (reverse result)))
 
 ;*** Regexp substitution ala Perl (or nearly...) ***
 (defun ~s (re string-or-list &optional match-nb)
