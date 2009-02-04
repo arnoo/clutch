@@ -20,6 +20,43 @@
 
 (enable-arc-lambdas)
 
+(defun access (object start &rest args)
+  (cond ((null object) nil)
+        ((and (or (listp object) (vectorp object)) (numberp start))
+           (if args (subseq object start (car args)) (elt object start)))
+        ((functionp object)
+           (apply object (cons start args)))
+        ((hash-table-p object)
+           (if args (mapcar [gethash _ object] (cons start args)) (gethash start object)))
+        ((and (symbolp start) (symbolp (elt object 0)))
+           (getf object start))
+        ((and (symbolp start) (consp (elt object 0)))
+           (cdr (assoc start object)))
+        ))
+
+(defun setaccess (object start &rest args)
+  (cond ((and (or (listp object) (vectorp object)) (numberp start))
+           (if (> (length args) 1) (setf (subseq object start (car args)) (cadr args)) (setf (elt object start) (car args))))
+        ((hash-table-p object)
+           (setf (gethash start object) (car args)))
+        ((and (symbolp start) (symbolp (elt object 0)))
+           (setf (getf object start) (car args)))
+        ((and (symbolp start) (consp (elt object 0)))
+           (rplacd (assoc start object) (car args)))
+        ))
+
+(defsetf access setaccess)
+
+(defun bracket-reader (stream char)
+  (declare (ignore char))
+  `(access ,@(read-delimited-list #\} stream t)))
+
+(defun enable-brackets ()
+  (set-macro-character #\{ #'bracket-reader)
+  (set-macro-character #\} (get-macro-character #\) nil)))
+
+(enable-brackets)
+
 ;*** in ala python ***
 (defun in (seq elmt)
 	"does seq contain elmt ?"
@@ -77,7 +114,6 @@
   (values (intern (apply #'mkstr args))))
 
 
-
 ; *** Paul Graham's anaphoric function from arc ***
 ; CL version from http://setagaya.googlecode.com/svn-history/r25/trunk/home/mc/arc-compat/anaphoric-op.lisp
 (defmacro afn (parms &body body)
@@ -100,11 +136,11 @@
 (defun parse-re (re)
   (let ((result (list "")))
        (loop for i from 1 below (length re)
-             do (if (and (char= (elt re i) #\/) (char/= (elt re (- i 1)) (elt "\\" 0))) 
+             do (if (and (char= {re i} #\/) (char/= {re (- i 1)} {"\\" 0})) 
                     (push "" result)
-                    (setf (car result) (mkstr (car result) (elt re i)))))
+                    (setf (car result) (mkstr (car result) {re i}))))
        (when (< (length result) 3) (push (car result) result) (setf (cadr result) ""))
-       (if (char/= (elt re 0) #\/) (setf (car result) (mkstr (elt re 0) (car result))))
+       (if (char/= {re 0} #\/) (setf (car result) (mkstr {re 0} (car result))))
        (if (in (car result) #\i) (setf (caddr result) (mkstr "(?i)" (caddr result))))
        (reverse result)))
 
@@ -129,9 +165,8 @@
              (apply (if (in flags #\g) #'identity [first _]) (list
                (loop for i from 0 below (length match-indexes) by 2 collect
                   (apply (if match-nb [nth match-nb _] #'identity) (list
-                      (let ((m (multiple-value-list (cl-ppcre:scan-to-strings regexp string-or-list :start (elt match-indexes i)))))
-                        (if (nth 1 m) (cons (car m) (vector-to-list* (cadr m))) nil))))))))))))
-
+                      (let ((m (multiple-value-list (cl-ppcre:scan-to-strings regexp string-or-list :start {match-indexes i}))))
+                        (if {m 1} (cons (car m) (vector-to-list* (cadr m))) nil))))))))))))
 
 (defun !~ (re string-or-list)
   "If <string-or-list> is a string:
@@ -170,7 +205,7 @@
   (if (string-equal sep "") (resplit "//" str)
     (loop for start = 0 then (+ end (length sep))
                  for end = (search sep str :start2 start)
-                        collecting (subseq str start end)
+                        collecting {str start end}
                                while end)))
 
 (defun join (join-string string-list)
@@ -193,9 +228,9 @@
   `(let ((number-of-elements (length ,list))) 
      (declare (ignorable number-of-elements))
      (loop for i from 0 below (length ,list) collect
-        (let ((it         (elt ,list i))
+        (let ((it         {,list i})
               (its-index  i)
-              (the-previous-one (if (> i 0) (elt ,list (- i 1))))
+              (the-previous-one (if (> i 0) {,list (- i 1)}))
               (its-rank   (+ 1 i)))
            (declare (ignorable it its-index the-previous-one its-rank))
            (progn ,@body)))))
@@ -219,8 +254,11 @@
 (defun glob (path-or-stream &key binary)
   "Globs the whole provided file, url or stream into a string or into a byte array if <binary> or some bytes cannot be decoded to characters"
   (cond
-    ((and (stringp path-or-stream) (string-equal (subseq path-or-stream 0 7) "http://"))
-       (glob (drakma:http-request path-or-stream :want-stream t :force-binary binary) :binary binary))
+    ((and (stringp path-or-stream) (string-equal {path-or-stream 0 7} "http://"))
+       (multiple-value-bind (body status-code headers real-url stream must-close reason-phrase)
+                            (drakma:http-request path-or-stream :want-stream t :force-binary binary)
+            (declare (ignorable headers real-url stream must-close reason-phrase))
+            (if (= 200 status-code) (glob body :binary binary) (if binary #() ""))))
     ((and binary (stringp path-or-stream))
        (with-open-file   (s path-or-stream :element-type '(unsigned-byte 8)) (glob s :binary t)))
     ((stringp path-or-stream)
@@ -288,6 +326,9 @@
 (defun select (object &key where order-by)
     (mapcar #'car (reduce #'append (mapcar [clsql:select _ :where (clsql-sys::generate-sql-reference where) :order-by (clsql-sys::generate-sql-reference order-by)] (if (listp object) object (list object))))))
 
+(defun feq (f &rest objects)
+  (apply #'eq (mapcar f objects)))
+
 ;flatten (On Lisp)
 (defun flatten (x)
   (labels ((rec (x acc)
@@ -296,39 +337,14 @@
                       (t (rec (car x) (rec (cdr x) acc))))))
           (rec x nil)))
 
-(defun access (object start &rest args)
-  (cond ((or (listp object) (vectorp object))
-           (if args (subseq object start (car args)) (elt object start)))
-        ((functionp object)
-           (apply object (cons start args)))
-        ((hash-table-p object)
-           (if args (mapcar [gethash _ object] (cons start args)) (gethash start object)))
-        ))
-
-(defun setaccess (object start &rest args)
-  (cond ((or (listp object) (vectorp object))
-           (if (> (length args) 1) (setf (subseq object start (car args)) (cadr args)) (setf (elt object start) (car args))))
-        ((hash-table-p object)
-           (setf (gethash start object) (car args)))
-        ))
-
-(defsetf access setaccess)
-
-(defun bracket-reader (stream char)
-  (declare (ignore char))
-  `(access ,@(read-delimited-list #\} stream t)))
-
-(defun enable-brackets ()
-  (set-macro-character #\{ #'bracket-reader)
-  (set-macro-character #\} (get-macro-character #\) nil)))
-
-(enable-brackets)
-
 (defun test (description output expected &key (test #'equal))
   (princ description)
   (if (funcall test output expected)
       (progn (format t " -> ok~%") t)
       (progn (format t " -> FAILED !~% ### OUTPUT ###~%") (describe output) (format t "### EXPECTED ###~%") (describe expected) nil)))
+
+(defun test-conditions (description output &rest functions)
+  (foreach functions (unless (apply it output))))
 
 (defmacro test-suite (name &rest body)
   `(progn
@@ -336,5 +352,69 @@
       (block test-suite1
              (foreach (quote ,body) (if (eval it) t (progn (format t "aborting test suite~%") (return-from test-suite1)))))))
 
-(defun update-record (object &rest args)
-  (clsql:update-records-from-instance (apply #'reinitialize-instance (cons object args))))
+; System based on run-prog-collect-output from stumpwm
+(defun system (command)
+  "run a command and read its output."
+  (with-input-from-string (ar command)
+    #+allegro (with-output-to-string (s)
+                (excl:run-shell-command (format nil "~a~{ ~a~}" prog args)
+                                        :output s :wait t :input ar))
+    #+clisp (with-output-to-string (s)
+              (let ((out (ext:run-program prog :arguments () :input ar :wait t :output :stream)))
+                (loop for i = (read-char out nil out)
+                      until (eq i out)
+                      do (write-char i s))))
+    #+cmu (with-output-to-string (s) (ext:run-program "/bin/sh" () :input ar :output s :error s :wait t))
+    #+sbcl (with-output-to-string (s)
+              (sb-ext:run-program "/bin/sh" () :input ar :output s :error s :wait t)))
+    #+ccl (with-output-to-string (s)
+              (ccl:run-program "/bin/sh" ()
+                             :wait t :output s :error t :input ar))
+    #-(or allegro clisp cmu sbcl ccl)
+    (error 'not-implemented :proc (list 'pipe-input prog args)))
+
+; get-env from stumpwm (also found in the CL cookbook)
+(defun getenv (var)
+  "Return the value of the environment variable."
+  #+allegro (sys::getenv (string var))
+  #+clisp (ext:getenv (string var))
+  #+(or cmu scl)
+  (cdr (assoc (string var) ext:*environment-list* :test #'equalp
+              :key #'string))
+  #+gcl (si:getenv (string var))
+  #+lispworks (lw:environment-variable (string var))
+  #+lucid (lcl:environment-variable (string var))
+  #+mcl (ccl::getenv var)
+  #+sbcl (sb-posix:getenv (string var))
+  #+openmcl (ccl:getenv (string var))
+  #-(or allegro clisp cmu gcl lispworks lucid mcl sbcl scl openmcl)
+  (error 'not-implemented :proc (list 'getenv var)))
+
+(defun (setf getenv) (val var)
+  "Set the value of the environment variable, @var{var} to @var{val}."
+  #+allegro (setf (sys::getenv (string var)) (string val))
+  #+clisp (setf (ext:getenv (string var)) (string val))
+  #+(or cmu scl)
+  (let ((cell (assoc (string var) ext:*environment-list* :test #'equalp
+                     :key #'string)))
+    (if cell
+        (setf (cdr cell) (string val))
+        (push (cons (intern (string var) "KEYWORD") (string val))
+              ext:*environment-list*)))
+  #+gcl (si:setenv (string var) (string val))
+  #+lispworks (setf (lw:environment-variable (string var)) (string val))
+  #+lucid (setf (lcl:environment-variable (string var)) (string val))
+  #+sbcl (sb-posix:putenv (format nil "~A=~A" (string var) (string val)))
+  #+openmcl (ccl:setenv (string var) (string val))
+  #-(or allegro clisp cmu gcl lispworks lucid sbcl scl openmcl)
+  (error 'not-implemented :proc (list '(setf getenv) var)))
+
+; argv adapted from CL-cookbook
+(defun argv (&optional index)
+  (let ((args (or #+SBCL *posix-argv*  
+                  #+LISPWORKS system:*line-arguments-list*
+                  #+CMU extensions:*command-line-words*
+                  nil)))
+    (awhen args
+       (if index (nth index it) it))))
+
