@@ -1,6 +1,11 @@
+(defpackage :cl-arno
+    (:use     #:cl)
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:awhen #:awhile #:awith #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-conditions #:system #:getenv #:foreach #:import-forced))
+
+(in-package :cl-arno)
 (require 'cl-ppcre)
 (require 'drakma)
-(require 'clsql)
+(require 'sb-posix)
 
 ; **** Lambda expressions ala Arc by Brad Ediger ***
 ;CL-USER> ([+ 1 _] 10)
@@ -252,7 +257,7 @@
 ; Reads a url/file/stream entirely then closes it and returns the contents as a string
 ; based on Shawn Betts's slurp http://www.emmett.ca/~sabetts/slurp.html
 (defun glob (path-or-stream &key binary)
-  "Globs the whole provided file, url or stream into a string or into a byte array if <binary> or some bytes cannot be decoded to characters"
+  "Globs the whole provided file, url or stream into a string or into a byte array if <binary>"
   (cond
     ((and (stringp path-or-stream) (string-equal {path-or-stream 0 7} "http://"))
        (multiple-value-bind (body status-code headers real-url stream must-close reason-phrase)
@@ -262,12 +267,10 @@
     ((and binary (stringp path-or-stream))
        (with-open-file   (s path-or-stream :element-type '(unsigned-byte 8)) (glob s :binary t)))
     ((stringp path-or-stream)
-       (handler-case 
-            (with-open-file   (s path-or-stream)
-                              (let ((seq (make-array (file-length s) :element-type 'character :fill-pointer t)))
-                                   (setf (fill-pointer seq) (read-sequence seq s))
-                                   seq))
-            (SB-INT:STREAM-DECODING-ERROR () (glob path-or-stream :binary t))))
+       (with-open-file   (s path-or-stream)
+                         (let ((seq (make-array (file-length s) :element-type 'character :fill-pointer t)))
+                              (setf (fill-pointer seq) (read-sequence seq s))
+                              seq)))
     ((and (streamp path-or-stream) binary)
        (let ((buf (make-array 4096 :element-type '(unsigned-byte 8)))
              (seq (make-array 0 :element-type '(unsigned-byte 8) :adjustable t)))
@@ -315,19 +318,22 @@
                       (export (read-from-string ,zesymbol))
                       (in-package ,(read-from-string (mkstr ":" ourpackage)))
                       (import (read-from-string ,(mkstr zepackage ":" zesymbol)))))))))
+;
+;(defmacro def-view-class-with-accessors-and-initargs (name superclasses slots &rest class-options)
+;  `(clsql:def-view-class
+;      ,name
+;      ,superclasses
+;      ,(mapcar [append _ `(:accessor ,(symb (symbol-name name) "-" (symbol-name (car _))) :initarg ,(reread ":" (symbol-name  (car _))))] slots)
+;      ,class-options))
+;
+;(defun select (object &key where order-by)
+;    (mapcar #'car (reduce #'append (mapcar [clsql:select _ :where (clsql-sys::generate-sql-reference where) :order-by (clsql-sys::generate-sql-reference order-by)] (if (listp object) object (list object))))))
 
-(defmacro def-view-class-with-accessors-and-initargs (name superclasses slots &rest class-options)
-  `(clsql:def-view-class
-      ,name
-      ,superclasses
-      ,(mapcar [append _ `(:accessor ,(symb (symbol-name name) "-" (symbol-name (car _))) :initarg ,(reread ":" (symbol-name  (car _))))] slots)
-      ,class-options))
+(defun f= (f &rest objects)
+  (apply #'equal (mapcar f objects)))
 
-(defun select (object &key where order-by)
-    (mapcar #'car (reduce #'append (mapcar [clsql:select _ :where (clsql-sys::generate-sql-reference where) :order-by (clsql-sys::generate-sql-reference order-by)] (if (listp object) object (list object))))))
-
-(defun feq (f &rest objects)
-  (apply #'eq (mapcar f objects)))
+(defun f/= (&rest args)
+  (not (apply f= args)))
 
 ;flatten (On Lisp)
 (defun flatten (x)
@@ -343,8 +349,8 @@
       (progn (format t " -> ok~%") t)
       (progn (format t " -> FAILED !~% ### OUTPUT ###~%") (describe output) (format t "### EXPECTED ###~%") (describe expected) nil)))
 
-(defun test-conditions (description output &rest functions)
-  (foreach functions (unless (apply it output))))
+;(defun test-conditions (description output &rest functions)
+;  (foreach functions (unless (apply it output))))
 
 (defmacro test-suite (name &rest body)
   `(progn
@@ -356,65 +362,59 @@
 (defun system (command)
   "run a command and read its output."
   (with-input-from-string (ar command)
-    #+allegro (with-output-to-string (s)
-                (excl:run-shell-command (format nil "~a~{ ~a~}" prog args)
-                                        :output s :wait t :input ar))
-    #+clisp (with-output-to-string (s)
-              (let ((out (ext:run-program prog :arguments () :input ar :wait t :output :stream)))
-                (loop for i = (read-char out nil out)
-                      until (eq i out)
-                      do (write-char i s))))
-    #+cmu (with-output-to-string (s) (ext:run-program "/bin/sh" () :input ar :output s :error s :wait t))
-    #+sbcl (with-output-to-string (s)
-              (sb-ext:run-program "/bin/sh" () :input ar :output s :error s :wait t)))
-    #+ccl (with-output-to-string (s)
-              (ccl:run-program "/bin/sh" ()
-                             :wait t :output s :error t :input ar))
+    #+allegro (with-output-to-string (s) (excl:run-shell-command (format nil "~a~{ ~a~}" prog args)
+                                                                  :output s :wait t :input ar))
+    #+clisp   (with-output-to-string (s)
+                (let ((out (ext:run-program prog :arguments () :input ar :wait t :output :stream)))
+                  (loop for i = (read-char out nil out)
+                        until (eq i out)
+                        do (write-char i s))))
+    #+cmu     (with-output-to-string (s) (ext:run-program "/bin/sh" () :input ar :output s :error s :wait t))
+    #+sbcl    (with-output-to-string (s) (sb-ext:run-program "/bin/sh" () :input ar :output s :error s :wait t)))
+    #+ccl     (with-output-to-string (s) (ccl:run-program "/bin/sh" () :wait t :output s :error t :input ar))
     #-(or allegro clisp cmu sbcl ccl)
-    (error 'not-implemented :proc (list 'pipe-input prog args)))
+              (error 'not-implemented :proc (list 'pipe-input prog args)))
 
 ; get-env from stumpwm (also found in the CL cookbook)
 (defun getenv (var)
   "Return the value of the environment variable."
-  #+allegro (sys::getenv (string var))
-  #+clisp (ext:getenv (string var))
-  #+(or cmu scl)
-  (cdr (assoc (string var) ext:*environment-list* :test #'equalp
-              :key #'string))
-  #+gcl (si:getenv (string var))
-  #+lispworks (lw:environment-variable (string var))
-  #+lucid (lcl:environment-variable (string var))
-  #+mcl (ccl::getenv var)
-  #+sbcl (sb-posix:getenv (string var))
-  #+openmcl (ccl:getenv (string var))
+  #+allegro       (sys::getenv (string var))
+  #+clisp         (ext:getenv (string var))
+  #+(or cmu scl)  (cdr (assoc (string var) ext:*environment-list* :test #'equalp :key #'string))
+  #+gcl           (si:getenv (string var))
+  #+lispworks     (lw:environment-variable (string var))
+  #+lucid         (lcl:environment-variable (string var))
+  #+mcl           (ccl::getenv var)
+  #+sbcl          (sb-posix:getenv (string var))
+  #+openmcl       (ccl:getenv (string var))
   #-(or allegro clisp cmu gcl lispworks lucid mcl sbcl scl openmcl)
-  (error 'not-implemented :proc (list 'getenv var)))
+                  (error 'not-implemented :proc (list 'getenv var)))
 
 (defun (setf getenv) (val var)
   "Set the value of the environment variable, @var{var} to @var{val}."
-  #+allegro (setf (sys::getenv (string var)) (string val))
-  #+clisp (setf (ext:getenv (string var)) (string val))
-  #+(or cmu scl)
-  (let ((cell (assoc (string var) ext:*environment-list* :test #'equalp
-                     :key #'string)))
-    (if cell
-        (setf (cdr cell) (string val))
-        (push (cons (intern (string var) "KEYWORD") (string val))
-              ext:*environment-list*)))
-  #+gcl (si:setenv (string var) (string val))
-  #+lispworks (setf (lw:environment-variable (string var)) (string val))
-  #+lucid (setf (lcl:environment-variable (string var)) (string val))
-  #+sbcl (sb-posix:putenv (format nil "~A=~A" (string var) (string val)))
-  #+openmcl (ccl:setenv (string var) (string val))
+  #+allegro      (setf (sys::getenv (string var)) (string val))
+  #+clisp        (setf (ext:getenv (string var)) (string val))
+  #+(or cmu scl) (let ((cell (assoc (string var) ext:*environment-list* :test #'equalp :key #'string)))
+                    (if cell
+                        (setf (cdr cell) (string val))
+                        (push (cons (intern (string var) "KEYWORD") (string val)) ext:*environment-list*)))
+  #+gcl          (si:setenv (string var) (string val))
+  #+lispworks    (setf (lw:environment-variable (string var)) (string val))
+  #+lucid        (setf (lcl:environment-variable (string var)) (string val))
+  #+sbcl         (sb-posix:putenv (format nil "~A=~A" (string var) (string val)))
+  #+openmcl      (ccl:setenv (string var) (string val))
   #-(or allegro clisp cmu gcl lispworks lucid sbcl scl openmcl)
-  (error 'not-implemented :proc (list '(setf getenv) var)))
+                 (error 'not-implemented :proc (list '(setf getenv) var)))
 
 ; argv adapted from CL-cookbook
 (defun argv (&optional index)
-  (let ((args (or #+SBCL *posix-argv*  
-                  #+LISPWORKS system:*line-arguments-list*
-                  #+CMU extensions:*command-line-words*
-                  nil)))
+  (let ((args (or #+sbcl                    sb-ext:*posix-argv*  
+                  #+lispworks               system:*line-arguments-list*
+                  #+cmu                     extensions:*command-line-words*
+                  #-(or sbcl lispworks cmu) (error 'not-implemented :proc (list 'getenv var)))))
     (awhen args
        (if index (nth index it) it))))
 
+(defun filesize (filepath)
+  (with-open-file (s filepath) (file-length s))
+  )
