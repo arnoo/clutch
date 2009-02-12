@@ -28,7 +28,10 @@
 (defun access (object start &rest args)
   (cond ((null object) nil)
         ((and (or (listp object) (vectorp object)) (numberp start))
-           (if args (subseq object start (car args)) (elt object start)))
+           (if args 
+               (subseq object (mod start           (+ 1 (length object))) 
+                              (+ 1 (mod (car args) (length object))))
+               (elt object start)))
         ((functionp object)
            (apply object (cons start args)))
         ((hash-table-p object)
