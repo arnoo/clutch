@@ -23,7 +23,10 @@
 (defun access (object start &rest args)
   (cond ((null object) nil)
         ((and (or (listp object) (vectorp object)) (numberp start))
-           (if args (subseq object start (car args)) (elt object start)))
+           (if args 
+               (subseq object (mod start           (+ 1 (length object))) 
+                              (+ 1 (mod (car args) (length object))))
+               (elt object start)))
         ((functionp object)
            (apply object (cons start args)))
         ((hash-table-p object)
@@ -341,8 +344,8 @@
       (progn (format t " -> ok~%") t)
       (progn (format t " -> FAILED !~% ### OUTPUT ###~%") (describe output) (format t "### EXPECTED ###~%") (describe expected) nil)))
 
-(defun test-conditions (description output &rest functions)
-  (foreach functions (unless (apply it output))))
+;(defun test-conditions (description output &rest functions)
+;  (foreach functions (unless (apply it output))))
 
 (defmacro test-suite (name &rest body)
   `(progn
@@ -409,7 +412,7 @@
 
 ; argv adapted from CL-cookbook
 (defun argv (&optional index)
-  (let ((args (or #+SBCL *posix-argv*  
+  (let ((args (or #+SBCL sb-ext:*posix-argv*  
                   #+LISPWORKS system:*line-arguments-list*
                   #+CMU extensions:*command-line-words*
                   nil)))
