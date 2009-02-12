@@ -80,7 +80,12 @@
 (defmacro awhen (test-form &rest then-forms)
   "Executes <body> with <it> bound to <expr> if <expr> is not nil"
 	`(let ((it ,test-form)) 
-		(when it ,@then-forms)))
+	 	 (when it ,@then-forms)))
+
+(defmacro aunless (test-form &rest then-forms)
+    "Executes <body> with <it> bound to <expr> if <expr> is nil"
+    `(let ((it ,test-form))
+       (unless it ,@then-forms)))
 
 ; *** Paul Graham's anaphoric while (cf. On Lisp) ***
 (defmacro awhile (expr &body body) 
