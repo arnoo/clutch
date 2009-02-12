@@ -1,6 +1,7 @@
 (require 'cl-ppcre)
 (require 'drakma)
 (require 'clsql)
+(require 'sb-posix)
 
 ; **** Lambda expressions ala Arc by Brad Ediger ***
 ;CL-USER> ([+ 1 _] 10)
