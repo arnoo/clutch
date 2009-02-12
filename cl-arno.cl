@@ -333,7 +333,7 @@
   (apply #'equal (mapcar f objects)))
 
 (defun f/= (&rest args)
-  (not (apply f= args)))
+  (not (apply #'f= args)))
 
 ;flatten (On Lisp)
 (defun flatten (x)
