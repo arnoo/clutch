@@ -420,3 +420,26 @@
     (awhen args
        (if index (nth index it) it))))
 
+(defmacro with-mocks (mocks &rest body)
+  (let* ((functions (remove-duplicates (mapcar [if (listp (car _)) (caar _) (car _)] mocks)))
+         (gensyms   (mapcar [gensym] (range 1 (length functions)))))
+    `(let (,@(foreach functions
+            `(,{gensyms its-index} (fdefinition (quote ,it)))))
+    (prog1
+        (progn
+          ,@(foreach functions
+            `(setf (fdefinition (quote ,it))
+                  (lambda (&rest args)
+                          (declare (ignorable args))
+                          (cond
+                            ,@(foreach (remove-if-not [and (listp (car _)) (eq (caar _) it)] mocks)
+                                 `((equal args (list ,(cadar it))) ,(cadr it)))
+                            (t
+                                ,(aif (remove-if-not [and (atom (car _)) (eq (car _) it)] mocks)
+                                      (cadar it)
+                                      '(error "unexpected arguments"))))
+                          )))
+          ,@body)
+        ,@(foreach functions
+           `(setf (fdefinition (quote ,it)) ,{gensyms its-index}))))))
+
