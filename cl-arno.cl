@@ -235,7 +235,7 @@
      `(loop for i from 0 below (length ,list) collect
         (let ((,(reread "it")         {,list i})
               (,(reread "its-index")  i))
-           (declare (ignorable it its-index))
+           (declare (ignorable ,(reread "it") ,(reread "its-index")))
            (progn ,@body))))
 
 ; *** Range nearly ala Python (in Python, end is not included) ***

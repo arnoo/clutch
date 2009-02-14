@@ -1,5 +1,8 @@
 (load "cl-arno.cl")
 
+(defpackage :cl-arno-tests (:use #:cl #:sb-ext #:cl-arno))
+(in-package :cl-arno-tests)
+
 (if 
   (and
 (test "Square bracket reader [+ 1 _]"           ([+ 1 _] 2)                                       3)
@@ -21,7 +24,7 @@
 (test "Range 1..3"                              (range 1 3)                                       '(1 2 3))
 (test "Range 0..4 by 2"                         (range 0 4 2)                                     '(0 2 4))
 (test "Range 1..-1 by -1"                       (range 1 -1 -1)                                   '(1 0 -1))
-(test "Foreach"                                 (foreach (list 1 2) (list it its-index its-rank)) '((1 0 1) (2 1 2)))
+(test "Foreach"                                 (foreach (list 1 2) (list it its-index)) '((1 0) (2 1)))
 (test "Regexp simple"                           (~ "/\\w/" "bob")                                 '("b"))
 (test "Regexp global"                           (~ "/\\w/g" "bob")                                '(("b") ("o") ("b")))
 (test "Regexp group"                            (~ "/(\\w)\\w/g" "bob")                           '(("bo" "b")))
