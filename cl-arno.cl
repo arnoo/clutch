@@ -305,28 +305,6 @@
                                 ,@body)
                              (delete-file ,filename)))))
 
-(defmacro import-forced (&rest symbols-as-strings)
-  (let ((ourpackage (package-name *package*)))
-       `(progn
-           ,@(foreach symbols-as-strings
-             (let* ((elts (~ "/^(.+):(.+)$/" it))
-                     (zepackage (cadr elts))
-                     (zesymbol (caddr elts)))
-                    `(progn (in-package ,(read-from-string (mkstr ":" zepackage)))
-                      (export (read-from-string ,zesymbol))
-                      (in-package ,(read-from-string (mkstr ":" ourpackage)))
-                      (import (read-from-string ,(mkstr zepackage ":" zesymbol)))))))))
-;
-;(defmacro def-view-class-with-accessors-and-initargs (name superclasses slots &rest class-options)
-;  `(clsql:def-view-class
-;      ,name
-;      ,superclasses
-;      ,(mapcar [append _ `(:accessor ,(symb (symbol-name name) "-" (symbol-name (car _))) :initarg ,(reread ":" (symbol-name  (car _))))] slots)
-;      ,class-options))
-;
-;(defun select (object &key where order-by)
-;    (mapcar #'car (reduce #'append (mapcar [clsql:select _ :where (clsql-sys::generate-sql-reference where) :order-by (clsql-sys::generate-sql-reference order-by)] (if (listp object) object (list object))))))
-
 (defun f= (f &rest objects)
   (apply #'equal (mapcar f objects)))
 
