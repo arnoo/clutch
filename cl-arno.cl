@@ -70,41 +70,6 @@
 	"does seq contain elmt ?"
 	(if (position elmt seq :test #'equal) t nil))
 
-; *** Paul Graham's anaphoric if (cf. On Lisp) ***
-(defmacro aif (test-form then-form &optional else-form)
-  "Executes <body> with <it> bound to <expr> if <expr> is not nil"
-	`(let ((it ,test-form)) 
-		(if it ,then-form ,else-form)))
-
-; *** Paul Graham's anaphoric when (cf. On Lisp) ***
-(defmacro awhen (test-form &rest then-forms)
-  "Executes <body> with <it> bound to <expr> if <expr> is not nil"
-	`(let ((it ,test-form)) 
-	 	 (when it ,@then-forms)))
-
-(defmacro aunless (test-form &rest then-forms)
-    "Executes <body> with <it> bound to <expr> if <expr> is nil"
-    `(let ((it ,test-form))
-       (unless it ,@then-forms)))
-
-; *** Paul Graham's anaphoric while (cf. On Lisp) ***
-(defmacro awhile (expr &body body) 
-  "Executes <body> with <it> bound to <expr> as long as <expr> is not nil"
-	`(do ((it ,expr ,expr)) ((not it)) ,@body))
-
-
-(defmacro awith (expr &body body)
-  "Executes <body> with <it> bound to <expr>"
-	`(let ((it ,expr)) ,@body))
-
-(defun lc (string)
-  "Converts a string to lowercase (shortcut for string-downcase)"
-  (string-downcase string))
-
-(defun uc (string)
-  "Converts a string to uppercase (shortcut for string-upcase)"
-  (string-upcase string))  
-
 ; mkstr by P.G. (On Lisp)
 (defun mkstr (&rest args)
   (with-output-to-string (s)
@@ -114,8 +79,7 @@
   (apply #'mkstr (remove-if-not #'identity args)))
 
 (defmacro str+= (place &rest args)
-  `(setf ,place (apply #'str (list ,place ,@args)))
-  )
+  `(setf ,place (apply #'str (list ,place ,@args))))
 
 ; reread by P.G. (On Lisp)
 (defun reread (&rest args)
@@ -126,6 +90,39 @@
 (defun symb (&rest args)
   (values (intern (apply #'mkstr args))))
 
+; *** Paul Graham's anaphoric if (cf. On Lisp) ***
+(defmacro aif (test-form then-form &optional else-form)
+  "Executes <body> with <it> bound to <expr> if <expr> is not nil"
+	`(let ((,(reread "it") ,test-form)) 
+		(if ,(reread "it") ,then-form ,else-form)))
+
+; *** Paul Graham's anaphoric when (cf. On Lisp) ***
+(defmacro awhen (test-form &rest then-forms)
+  "Executes <body> with <it> bound to <expr> if <expr> is not nil"
+	`(let ((,(reread "it") ,test-form)) 
+	 	 (when ,(reread "it") ,@then-forms)))
+
+(defmacro aunless (test-form &rest then-forms)
+    "Executes <body> with <it> bound to <expr> if <expr> is nil"
+    `(let ((,(reread "it") ,test-form))
+         (unless ,(reread "it") ,@then-forms)))
+
+; *** Paul Graham's anaphoric while (cf. On Lisp) ***
+(defmacro awhile (expr &body body) 
+  "Executes <body> with <it> bound to <expr> as long as <expr> is not nil"
+	`(do ((,(reread "it") ,expr ,expr)) ((not ,(reread "it"))) ,@body))
+
+(defmacro awith (expr &body body)
+  "Executes <body> with <it> bound to <expr>"
+	`(let ((,(reread "it") ,expr)) ,@body))
+
+(defun lc (string)
+  "Converts a string to lowercase (shortcut for string-downcase)"
+  (string-downcase string))
+
+(defun uc (string)
+  "Converts a string to uppercase (shortcut for string-upcase)"
+  (string-upcase string))  
 
 ; *** Paul Graham's anaphoric function from arc ***
 ; CL version from http://setagaya.googlecode.com/svn-history/r25/trunk/home/mc/arc-compat/anaphoric-op.lisp
@@ -234,19 +231,12 @@
 (defmacro foreach (list &rest body)
   "Executes body for each element of <list>, with:
     <it>               bound to the current element
-    <its-index>        bound to its index in the list,
-    <its-rank>         bound to its rank in the list (its-index+1)
-    <the-previous-one> bound to the previous element (nil if the current index is 0)
-    <number-of-elements> bound to the length of <list>"
-  `(let ((number-of-elements (length ,list))) 
-     (declare (ignorable number-of-elements))
-     (loop for i from 0 below (length ,list) collect
-        (let ((it         {,list i})
-              (its-index  i)
-              (the-previous-one (if (> i 0) {,list (- i 1)}))
-              (its-rank   (+ 1 i)))
-           (declare (ignorable it its-index the-previous-one its-rank))
-           (progn ,@body)))))
+    <its-index>        bound to its index in the list,"
+     `(loop for i from 0 below (length ,list) collect
+        (let ((,(reread "it")         {,list i})
+              (,(reread "its-index")  i))
+           (declare (ignorable it its-index))
+           (progn ,@body))))
 
 ; *** Range nearly ala Python (in Python, end is not included) ***
 ; >(range 1 10)
