@@ -232,11 +232,14 @@
   "Executes body for each element of <list>, with:
     <it>               bound to the current element
     <its-index>        bound to its index in the list,"
+    (let ((var (if (eq (car body) 'as)
+                   (symbol-name (cadr body))
+                   "it")))
      `(loop for i from 0 below (length ,list) collect
-        (let ((,(reread "it")         {,list i})
-              (,(reread "its-index")  i))
-           (declare (ignorable ,(reread "it") ,(reread "its-index")))
-           (progn ,@body))))
+        (let ((,(reread var)         {,list i})
+              (,(reread "@" var)  i))
+           (declare (ignorable ,(reread var) ,(reread "@" var)))
+           (progn ,@(if (eq (car body) 'as) {body 1 -1} body))))))
 
 ; *** Range nearly ala Python (in Python, end is not included) ***
 ; >(range 1 10)
