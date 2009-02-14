@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:awhen #:awhile #:awith #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-conditions #:system #:getenv #:foreach #:import-forced))
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:awhen #:awhile #:awith #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced))
 
 (in-package :cl-arno)
 (require 'cl-ppcre)
@@ -328,9 +328,6 @@
       (progn (format t " -> ok~%") t)
       (progn (format t " -> FAILED !~% ### OUTPUT ###~%") (describe output) (format t "### EXPECTED ###~%") (describe expected) nil)))
 
-;(defun test-conditions (description output &rest functions)
-;  (foreach functions (unless (apply it output))))
-
 (defmacro test-suite (name &rest body)
   `(progn
       (format t "*** ~A ***~%" ,name)
@@ -402,21 +399,20 @@
   (let* ((functions (remove-duplicates (mapcar [if (listp (car _)) (caar _) (car _)] mocks)))
          (gensyms   (mapcar [gensym] (range 1 (length functions)))))
     `(let (,@(foreach functions
-            `(,{gensyms its-index} (fdefinition (quote ,it)))))
+            `(,{gensyms @it} (fdefinition (quote ,it)))))
     (prog1
         (progn
-          ,@(foreach functions
-            `(setf (fdefinition (quote ,it))
+          ,@(foreach functions as f
+            `(setf (fdefinition (quote ,f))
                   (lambda (&rest args)
                           (declare (ignorable args))
                           (cond
-                            ,@(foreach (remove-if-not [and (listp (car _)) (eq (caar _) it)] mocks)
+                            ,@(foreach (remove-if-not [and (listp (car _)) (eq (caar _) f)] mocks)
                                  `((equal args (list ,(cadar it))) ,(cadr it)))
-                            (t
-                                ,(aif (remove-if-not [and (atom (car _)) (eq (car _) it)] mocks)
+                            (t ,(aif (remove-if-not [and (atom (car _)) (eq (car _) f)] mocks)
                                       (cadar it)
                                       '(error "unexpected arguments"))))
                           )))
           ,@body)
         ,@(foreach functions
-           `(setf (fdefinition (quote ,it)) ,{gensyms its-index}))))))
+           `(setf (fdefinition (quote ,it)) ,{gensyms @it}))))))
