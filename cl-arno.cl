@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:awhen #:awhile #:awith #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced))
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced #:with-temporary-file #:it))
 
 (in-package :cl-arno)
 (require 'cl-ppcre)
@@ -93,28 +93,28 @@
 ; *** Paul Graham's anaphoric if (cf. On Lisp) ***
 (defmacro aif (test-form then-form &optional else-form)
   "Executes <body> with <it> bound to <expr> if <expr> is not nil"
-	`(let ((,(reread "it") ,test-form)) 
-		(if ,(reread "it") ,then-form ,else-form)))
+	`(let ((it ,test-form)) 
+		(if it ,then-form ,else-form)))
 
 ; *** Paul Graham's anaphoric when (cf. On Lisp) ***
 (defmacro awhen (test-form &rest then-forms)
   "Executes <body> with <it> bound to <expr> if <expr> is not nil"
-	`(let ((,(reread "it") ,test-form)) 
-	 	 (when ,(reread "it") ,@then-forms)))
+	`(let ((it ,test-form)) 
+	 	 (when it ,@then-forms)))
 
 (defmacro aunless (test-form &rest then-forms)
     "Executes <body> with <it> bound to <expr> if <expr> is nil"
-    `(let ((,(reread "it") ,test-form))
-         (unless ,(reread "it") ,@then-forms)))
+    `(let ((it ,test-form))
+         (unless it ,@then-forms)))
 
 ; *** Paul Graham's anaphoric while (cf. On Lisp) ***
 (defmacro awhile (expr &body body) 
   "Executes <body> with <it> bound to <expr> as long as <expr> is not nil"
-	`(do ((,(reread "it") ,expr ,expr)) ((not ,(reread "it"))) ,@body))
+	`(do ((it ,expr ,expr)) ((not it)) ,@body))
 
 (defmacro awith (expr &body body)
   "Executes <body> with <it> bound to <expr>"
-	`(let ((,(reread "it") ,expr)) ,@body))
+	`(let ((it ,expr)) ,@body))
 
 (defun lc (string)
   "Converts a string to lowercase (shortcut for string-downcase)"
@@ -332,7 +332,8 @@
   `(progn
       (format t "*** ~A ***~%" ,name)
       (block test-suite1
-             (foreach (quote ,body) (if (eval it) t (progn (format t "aborting test suite~%") (return-from test-suite1)))))))
+             (loop for test in (quote ,body) do (unless (eval test) (progn (format t "aborting test suite~%") (return-from test-suite1))))
+             t)))
 
 ; System based on run-prog-collect-output from stumpwm
 (defun system (command)
@@ -413,6 +414,6 @@
                                       (cadar it)
                                       '(error "unexpected arguments"))))
                           )))
-          ,@body)
+          ,@(macroexpand body))
         ,@(foreach functions
            `(setf (fdefinition (quote ,it)) ,{gensyms @it}))))))

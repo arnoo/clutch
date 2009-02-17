@@ -5,6 +5,8 @@
 
 (if 
   (and
+(test "Aif 1"                                   (aif t it)                                        t)
+(test "Aif 2"                                   (aif nil 2 it)                                    nil)
 (test "Square bracket reader [+ 1 _]"           ([+ 1 _] 2)                                       3)
 (test "Square bracket reader [+ _ __]"          ([+ _ __] 2 3)                                    5)
 (test "Curly brackets reader list"              {(list 1 2 3) 1}                                  2)
@@ -40,6 +42,8 @@
 (test "Glob/unglob"                             (progn (unglob "/tmp/tarno" #(222 233 144)) 
                                                        (glob "/tmp/tarno"))                         #(222 233 144))
                                                 (delete-file "/tmp/tarno")
+                                                (defun f (x) x)
+(test "with-mocks"                              (with-mocks ((f 4) ((f 3) 2)) (list (f 3) (f 2) (f 4))) '(2 4 4))
 )
   (format t "*** All tests passed successfully ***~%")
   (format t "*** There were errors ***~%"))
