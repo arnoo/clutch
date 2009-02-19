@@ -332,7 +332,8 @@
   `(progn
       (format t "*** ~A ***~%" ,name)
       (block test-suite1
-             (loop for test in (quote ,body) do (unless (eval test) (progn (format t "aborting test suite~%") (return-from test-suite1))))
+             (loop for test in (quote ,body) do (unless (eval test) (progn (format t "aborting test suite~%~%") (return-from test-suite1))))
+             (format t "~%")
              t)))
 
 ; System based on run-prog-collect-output from stumpwm
