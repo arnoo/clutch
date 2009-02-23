@@ -29,10 +29,10 @@
   (cond ((null object) nil)
         ((and (or (listp object) (vectorp object)) (numberp start))
            (if (and args (car args))
-               (if (or (> (car args) (length object)) (and (minusp (car args)) (> (- (car args)) (+ (length object) 1))))
+               (if (or (> (car args) (- (length object) 1)) (and (minusp (car args)) (> (- (car args)) (+ (length object) 1))))
                    (error "Second index out of bounds")
                    (subseq object start 
-                                  (if (>= (car args) 0) (car args) (+ (length object) 1 (car args)))))
+                                  (if (>= (car args) 0) (+ (car args) 1) (+ (length object) 1 (car args)))))
                (elt object start)))
         ((functionp object)
            (apply object (cons start args)))

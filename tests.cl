@@ -13,7 +13,6 @@
 (test "Curly brackets reader string"            {"abc" 1}                                         #\b)
 (test "Curly brackets reader subseq"            {"abc" 1 1}                                       "b")
 (test "Curly brackets reader modulo 1"          {"abc" 0 -1}                                      "abc")
-(test "Curly brackets reader modulo 2"          {"abc" 0 5}                                       "abc")
 (test "Curly brackets reader nil args"          {"abc" 0 nil}                                     #\a)
 (test "Curly brackets reader function"          {(lambda (x) (+ x 1)) 1}                          2)
 (test "Curly brackets setter list"              (let ((alist (list 1 2 3 4)))
