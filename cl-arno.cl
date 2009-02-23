@@ -28,8 +28,8 @@
 (defun access (object start &rest args)
   (cond ((null object) nil)
         ((and (or (listp object) (vectorp object)) (numberp start))
-           (if args 
-               (subseq object (mod start           (+ 1 (length object))) 
+           (if (and args (car args))
+               (subseq object (mod start (+ 1 (length object))) 
                               (+ 1 (mod (car args) (length object))))
                (elt object start)))
         ((functionp object)
@@ -39,8 +39,7 @@
         ((and (symbolp start) (symbolp (elt object 0)))
            (getf object start))
         ((and (symbolp start) (consp (elt object 0)))
-           (cdr (assoc start object)))
-        ))
+           (cdr (assoc start object)))))
 
 (defun setaccess (object start &rest args)
   (cond ((and (or (listp object) (vectorp object)) (numberp start))
@@ -215,7 +214,7 @@
   (if (string-equal sep "") (resplit "//" str)
     (loop for start = 0 then (+ end (length sep))
                  for end = (search sep str :start2 start)
-                        collecting {str start end}
+                        collecting {str start (- (aif end it (length str)) 1)}
                                while end)))
 
 (defun join (join-string string-list)
