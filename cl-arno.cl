@@ -315,8 +315,8 @@
 (defun f/= (&rest args)
   (not (apply #'f= args)))
 
-;flatten (On Lisp)
-(defun flatten (x)
+;flatten (Adapted from On Lisp)
+(defun flatten (&rest x)
   (labels ((rec (x acc)
                 (cond ((null x) acc)
                       ((atom x) (cons x acc))
@@ -397,6 +397,23 @@
 (defun filesize (filepath)
   (with-open-file (s filepath) (file-length s))
   )
+
+(defun ls (dir &key recurse files-only dirs-only)
+   #+(or :sbcl :cmu :scl :lispworks)
+    (let* ((contents (directory (str dir "/*.*")))
+           (dirs nil)
+           (files nil))
+       (mapcar #'str
+         (if (not (or recurse files-only dirs-only))
+             contents
+             (progn
+               (loop for path in contents
+                     when (directory (str path "/")) do (push path dirs)
+                     when (not (or dirs-only (directory (str path "/")))) do (push path files))
+               (flatten (when (not dirs-only) files)
+                        (when (not files-only) dirs)
+                        (when recurse
+                           (mapcar [ls _ :recurse recurse :files-only files-only :dirs-only dirs-only] dirs))))))))
 
 (defmacro with-mocks (mocks &rest body)
   (let* ((functions (remove-duplicates (mapcar [if (listp (car _)) (caar _) (car _)] mocks)))
