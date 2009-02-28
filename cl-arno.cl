@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced #:with-temporary-file #:it))
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced #:with-temporary-file #:it #:ls))
 
 (in-package :cl-arno)
 (require 'cl-ppcre)
@@ -395,8 +395,7 @@
        (if index (nth index it) it))))
 
 (defun filesize (filepath)
-  (with-open-file (s filepath) (file-length s))
-  )
+  (with-open-file (s filepath) (file-length s)))
 
 (defun ls (dir &key recurse files-only dirs-only)
    #+(or :sbcl :cmu :scl :lispworks)
