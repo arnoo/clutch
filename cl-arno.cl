@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced #:with-temporary-file #:it #:ls))
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced #:with-temporary-file #:it #:ls))
 
 (in-package :cl-arno)
 (require 'cl-ppcre)
@@ -102,6 +102,13 @@
   "Executes <body> with <it> bound to <expr> if <expr> is not nil"
 	`(let ((it ,test-form)) 
 	 	 (when it ,@then-forms)))
+
+; *** Paul Graham's anaphoric and (cf. On Lisp) ***
+(defmacro aand (&rest args)
+  (cond ((null args) t)
+        ((null (cdr args)) (car args))
+        (t `(aif ,(car args) (aand ,@(cdr args))))))
+ 
 
 (defmacro aunless (test-form &rest then-forms)
     "Executes <body> with <it> bound to <expr> if <expr> is nil"
