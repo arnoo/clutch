@@ -296,11 +296,13 @@
                                                    ((eq x s))
                                                    (write-char x out)))))))
 
-(defun unglob (filename sequence)
+(defun unglob (filename sequence &key if-exists)
   (progn
     (with-open-file (stream filename
                             :direction :output
-                            :element-type (if (stringp sequence) 'character '(unsigned-byte 8)))
+                            :element-type (if (stringp sequence) 'character '(unsigned-byte 8))
+                            :if-exists if-exists
+                            :if-does-not-exist :create)
       (write-sequence sequence stream))
     t))
 
