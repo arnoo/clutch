@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv))
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash))
 
 (in-package :cl-arno)
 (require 'cl-ppcre)
@@ -163,11 +163,11 @@
        (reverse result)))
 
 ;*** Regexp match ala Perl ***
-(defun ~ (re string-or-list &optional match-nb)
+(defun ~ (re string-or-list &optional match-nb1 match-nb2)
   "If <string-or-list> is a string:
     returns nil if regular expression <re> does not match the string
     returns the part of the string that matches <re> and all grouped matches ()
-    if <match-nb> is not nil, only match number <match-nb> will be returned
+    if <match-nb1> is not nil, only match number <match-nb1> will be returned
    if <string-or-list> is a list
     returns the elements of that list that match <re>
     
@@ -176,13 +176,18 @@
   (destructuring-bind (regexp subre flags) (parse-re re)
     (declare (ignorable subre))
     (if (listp string-or-list)
-        (remove-if-not [cl-ppcre:scan regexp _] string-or-list)
+        (let ((matching (remove-if-not [cl-ppcre:scan regexp _] string-or-list)))
+             (if match-nb1
+                 (if match-nb2
+                     (~ re (nth match-nb1 matching) match-nb2)
+                     (nth match-nb1 matching))
+                 matching))
         (let ((match-indexes (cl-ppcre:all-matches regexp string-or-list)))
            (when match-indexes
              (unless (in flags #\g) (setf (cddr match-indexes) nil))
              (apply (if (in flags #\g) #'identity [first _]) (list
                (loop for i from 0 below (length match-indexes) by 2 collect
-                  (apply (if match-nb [nth match-nb _] #'identity) (list
+                  (apply (if match-nb1 [nth match-nb1 _] #'identity) (list
                       (let ((m (multiple-value-list (cl-ppcre:scan-to-strings regexp string-or-list :start {match-indexes i}))))
                         (if {m 1} (cons (car m) (vector-to-list* (cadr m))) nil))))))))))))
 
@@ -444,3 +449,9 @@
           ,@(macroexpand body))
         ,@(foreach functions
            `(setf (fdefinition (quote ,it)) ,{gensyms @it}))))))
+
+(defmacro mkhash (&rest args)
+  (let ((hash (make-hash-table :test 'equal)))
+       (loop for i from 0 below (length args) by 2
+             do (setf {hash {args i}} {args (+ i 1)}))
+       hash))
