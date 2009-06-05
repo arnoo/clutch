@@ -160,6 +160,7 @@
        (when (< (length result) 3) (push (car result) result) (setf (cadr result) ""))
        (if (char/= {re 0} #\/) (setf (car result) (mkstr {re 0} (car result))))
        (if (in (car result) #\i) (setf (caddr result) (mkstr "(?i)" (caddr result))))
+       (setf (cadr result) (cl-ppcre::regex-replace-all "\\\\/" (cadr result) "/"))
        (reverse result)))
 
 ;*** Regexp match ala Perl ***
