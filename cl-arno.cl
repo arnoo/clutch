@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash))
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o))
 
 (in-package :cl-arno)
 (require 'cl-ppcre)
@@ -12,12 +12,19 @@
 ;11
 ;CL-USER> ([+ _ __] 1 2)
 ;3
+;added possibility of functional position for _ or __ :
+;CL-USER> ([_ 1 2] (list 1 2 3))
+;(2 3)
 
 (defun square-bracket-reader (stream char)
   (declare (ignore char))
-  `(lambda (&optional ,(intern "_") ,(intern "__"))
-           (declare (ignorable ,(intern "_") ,(intern "__")))
-           ,(read-delimited-list #\] stream t)))
+  (let ((contents (read-delimited-list #\] stream t)))
+     `(lambda (&optional ,(intern "_") ,(intern "__"))
+              (declare (ignorable ,(intern "_") ,(intern "__")))
+              ,(if (or (eq (intern "_") (nth 0 contents))
+                       (eq (intern "__") (nth 0 contents)))
+                   `(access ,@contents)
+                   contents))))
 
 (defun enable-arc-lambdas ()
   (set-macro-character #\[ #'square-bracket-reader)
@@ -51,8 +58,9 @@
         ((and (symbolp start) (symbolp (elt object 0)))
            (setf (getf object start) (car args)))
         ((and (symbolp start) (consp (elt object 0)))
-           (rplacd (assoc start object) (car args)))
-        ))
+           (if (assoc start object)
+                (rplacd (assoc start object) (car args))
+                (append object (list (cons start (car args))))))))
 
 (defsetf access setaccess)
 
@@ -65,6 +73,18 @@
   (set-macro-character #\} (get-macro-character #\) nil)))
 
 (enable-brackets)
+
+(defun pick (object &rest places)
+  (mapcar [access object _] places))
+
+;function composition from on-lisp (compose)
+(defun o (&rest fns)
+  "compose functions"
+  (if fns
+      (let ((fn1 (car (last fns)))
+            (fns (butlast fns))) #'(lambda (&rest args)
+          (reduce #'funcall fns
+                  :from-end t :initial-value (apply fn1 args)))) #'identity))
 
 ;*** in ala python ***
 (defun in (seq elmt)
@@ -85,7 +105,6 @@
 ; reread by P.G. (On Lisp)
 (defun reread (&rest args)
   (values (read-from-string (apply #'mkstr args))))
-
 
 ; symb by P.G. (On Lisp)
 (defun symb (&rest args)
@@ -207,7 +226,7 @@
         (if (not (cl-ppcre::scan regexp string-or-list))
             string-or-list))))
 
-;*** Regexp substitution ala Perl (or nearly...) ***
+;*** Regexp substitution a la Perl (or nearly...) ***
 (defun ~s (re string-or-list &optional match-nb)
   "Replaces all substrings that match <re> in <string> by <replacement>.
   <flags> can contain Perl regexp flags like g"

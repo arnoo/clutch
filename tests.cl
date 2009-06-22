@@ -9,6 +9,7 @@
 (test "Aif 2"                                   (aif nil 2 it)                                    nil)
 (test "Square bracket reader [+ 1 _]"           ([+ 1 _] 2)                                       3)
 (test "Square bracket reader [+ _ __]"          ([+ _ __] 2 3)                                    5)
+(test "Square bracket reader [_ 1]"             ([_ 1] (list 1 2 3))                              2)
 (test "Curly brackets reader list"              {(list 1 2 3) 1}                                  2)
 (test "Curly brackets reader string"            {"abc" 1}                                         #\b)
 (test "Curly brackets reader subseq"            {"abc" 1 1}                                       "b")
