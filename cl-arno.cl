@@ -243,23 +243,25 @@
 (defun resplit (re string)
   (cl-ppcre:split (car (parse-re re)) string))
 
-; split adapted from lisp-magick's string-split
-(defun split (sep str)
-  (if (string-equal sep "") (resplit "//" str)
-    (loop for start = 0 then (+ end (length sep))
-                 for end = (search sep str :start2 start)
-                        collecting {str start (- (aif end it (length str)) 1)}
-                               while end)))
+(defun split (sep seq)
+  (if (= (length sep) 0)
+      (coerce seq 'list)
+      (loop for start = 0 then (+ end (length sep))
+                   for end = (search sep seq :start2 start)
+                          collecting {seq start (- (aif end it (length seq)) 1)}
+                                 while end)))
 
-(defun join (join-string string-list)
-  (if (> (length string-list) 1) (mkstr (car string-list) join-string (join join-string (cdr string-list))) (car string-list)))
+(defun join (join-seq seq-list)
+  (if (> (length seq-list) 1)
+      (concatenate (class-of join-seq) (car seq-list) join-seq (join join-seq (cdr seq-list)))
+      (car seq-list)))
 
-;*** x a la perl/python/ruby *** TODO : rendre universel pour tout type de sequence
-(defun x (string number)
-  "returns a string composed of <number> times <string>"
-  (if (> number 1) (concatenate 'string string (x string (- number 1)))
-      (if (<= number 0) "" string)))
-
+;*** x a la perl/python/ruby ***
+(defun x (seq nb)
+  "returns a sequence composed of <nb> times <sequence>"
+  (let ((s seq))
+    (loop for i from 1 below nb do (setf s (concatenate 'sequence s seq)))
+    (coerce s (class-of seq))))
 
 (defmacro foreach (list &rest body)
   "Executes body for each element of <list>, with:
