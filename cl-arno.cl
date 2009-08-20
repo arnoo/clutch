@@ -252,7 +252,7 @@
       (coerce seq 'list)
       (loop for start = 0 then (+ end (length sep))
                    for end = (search sep seq :start2 start)
-                          collecting {seq start (- (aif end it (length seq)) 1)}
+                          collecting {seq start (- (or end (length seq)) 1)}
                                  while end)))
 
 (defun join (join-seq seq-list)
