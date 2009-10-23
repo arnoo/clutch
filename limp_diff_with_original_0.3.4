@@ -1,0 +1,123 @@
+diff -d -r ./bin/limp-hyperspec.pl ../../limp/0.3.4/bin/limp-hyperspec.pl
+15c15
+< $browser_name = "opera";
+---
+> $browser_name = "links";
+18c18
+< @browser_args = ("-remote", "openURL(file://localhost%s,new-page)");
+---
+> @browser_args = ();
+21c21
+< $external = 1;
+---
+> $external = 0;
+diff -d -r ./bin/lisp.sh ../../limp/0.3.4/bin/lisp.sh
+149c149
+<     [[ `which rlwrap` ]] && RLWRAP="rlwrap -b $BREAK_CHARS"
+---
+>     #[[ `which rlwrap` ]] && RLWRAP="rlwrap -b $BREAK_CHARS"
+187c187
+<     echo "defscrollback   1000" >> $initfile
+---
+>     echo "defscrollback   2000" >> $initfile
+Seulement dans ../../limp/0.3.4/vim: RainbowParenthsis.vim
+diff -d -r ./vim/bridge.vim ../../limp/0.3.4/vim/bridge.vim
+224c224
+<                 let core_opt = "-c ".core
+---
+>                 let core_opt = "-c ".core." "
+422a423
+>       silent exe "%s/	\\+/ /ge"
+diff -d -r ./vim/highlight.vim ../../limp/0.3.4/vim/highlight.vim
+70c70
+<         au CursorMoved * silent call s:LimpHighlight_handler()
+---
+> "        au CursorMoved * silent call s:LimpHighlight_handler()
+74c74
+<     call s:LimpHighlight_handler()
+---
+>  "   call s:LimpHighlight_handler()
+diff -d -r ./vim/keys.vim ../../limp/0.3.4/vim/keys.vim
+10a11,14
+> nmap <buffer> <F6>                 <Plug>FormatCurrent
+> nmap <buffer> <F7>                 <Plug>FormatTop
+> nmap <buffer> <F10>                <Plug>EvalCurrent
+> nmap <buffer> <F11>                <Plug>EvalTop
+diff -d -r ./vim/limp.vim ../../limp/0.3.4/vim/limp.vim
+49c49
+< runtime ftplugin/lisp/limp/autoclose.vim
+---
+> "runtime ftplugin/lisp/limp/autoclose.vim
+51a52
+> runtime ftplugin/lisp/limp/RainbowParenthsis.vim
+diff -d -r ./vim/mode.vim ../../limp/0.3.4/vim/mode.vim
+30,56c30,33
+<     set t_Co=256
+<     if !exists("g:colors_name")
+<         colorscheme desert256
+<     endif
+< 
+<     hi Brackets      ctermbg=53 ctermfg=white 
+<     hi BracketsBlock ctermbg=235 guibg=lightgray
+<     hi StatusLine    ctermbg=white ctermfg=160
+<     hi StatusLineNC  ctermbg=black ctermfg=gray
+<     hi Pmenu         ctermbg=53 ctermfg=255
+<     hi PmenuSel      ctermbg=255 ctermfg=53
+< 
+<     "
+<     " set all parens to gray
+<     "
+<     hi hlLevel0 ctermfg=238
+<     hi hlLevel1 ctermfg=238
+<     hi hlLevel2 ctermfg=238
+<     hi hlLevel3 ctermfg=238
+<     hi hlLevel4 ctermfg=238
+<     hi hlLevel5 ctermfg=238
+<     hi hlLevel6 ctermfg=238
+<     hi hlLevel7 ctermfg=238
+<     hi hlLevel8 ctermfg=238
+<     hi hlLevel9 ctermfg=238
+<     hi hlLevel10 ctermfg=238
+<     hi hlLevel11 ctermfg=238
+---
+>     "set t_Co=256
+> "    if !exists("g:colors_name")
+> "       colorscheme desert256
+> "    endif
+57a35,57
+> 	hi Brackets      ctermbg=53 ctermfg=white 
+> 	hi BracketsBlock ctermbg=235 guibg=lightgray
+> 	hi StatusLine    ctermbg=white ctermfg=160
+> 	hi StatusLineNC  ctermbg=black ctermfg=gray
+> 	hi Pmenu         ctermbg=53 ctermfg=255
+> 	hi PmenuSel      ctermbg=255 ctermfg=53
+> "
+> "    "
+> "    " set all parens to gray
+> "    "
+> "    hi hlLevel0 ctermfg=238
+> "    hi hlLevel1 ctermfg=238
+> "    hi hlLevel2 ctermfg=238
+> "    hi hlLevel3 ctermfg=238
+> "    hi hlLevel4 ctermfg=238
+> "    hi hlLevel5 ctermfg=238
+> "    hi hlLevel6 ctermfg=238
+> "    hi hlLevel7 ctermfg=238
+> "    hi hlLevel8 ctermfg=238
+> "    hi hlLevel9 ctermfg=238
+> "    hi hlLevel10 ctermfg=238
+> "    hi hlLevel11 ctermfg=238
+> "
+59c59
+<     call AutoClose_start()
+---
+>     "call AutoClose_start()
+69c69
+<     call AutoClose_stop()
+---
+>     "call AutoClose_stop()
+89c89
+< setlocal foldmethod=marker foldmarker=(,) foldminlines=1
+---
+> "setlocal foldmethod=marker foldmarker=(,) foldminlines=1
+Seulement dans ../../limp/0.3.4/vim: thesaurus
