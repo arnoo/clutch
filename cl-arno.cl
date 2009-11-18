@@ -100,12 +100,6 @@
   (with-output-to-string (s)
      (dolist (a args) (princ a s))))
 
-(defun str (&rest args)
-  (apply #'mkstr (remove-if-not #'identity args)))
-
-(defmacro str+= (place &rest args)
-  `(setf ,place (apply #'str (list ,place ,@args))))
-
 ; reread by P.G. (On Lisp)
 (defun reread (&rest args)
   (values (read-from-string (apply #'mkstr args))))
@@ -363,6 +357,11 @@
                       (t (rec (car x) (rec (cdr x) acc))))))
           (rec x nil)))
 
+(defun str (&rest args)
+  (apply #'mkstr (remove-if-not #'identity (flatten args))))
+
+(defmacro str+= (place &rest args)
+  `(setf ,place (apply #'str (list ,place ,@args))))
 (defun test (description output expected &key (test #'equal))
   (princ description)
   (if (funcall test output expected)
