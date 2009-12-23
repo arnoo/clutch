@@ -3,7 +3,10 @@
     (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o))
 
 (in-package :cl-arno)
-(mapcar (lambda (x) (asdf:operate 'asdf:load-op x)) '(cl-ppcre drakma sb-posix closer-mop))
+(asdf:operate 'asdf:load-op 'cl-ppcre)
+#-abcl (asdf:operate 'asdf:load-op 'drakma)
+#-abcl (asdf:operate 'asdf:load-op 'sb-posix)
+#-abcl (asdf:operate 'asdf:load-op 'closer-mop)
 
 ; **** Lambda expressions ala Arc by Brad Ediger ***
 ;CL-USER> ([+ 1 _] 10)
