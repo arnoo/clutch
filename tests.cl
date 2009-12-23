@@ -1,6 +1,6 @@
 (load "cl-arno.cl")
 
-(defpackage :cl-arno-tests (:use #:cl #:sb-ext #:cl-arno))
+(defpackage :cl-arno-tests (:use #:cl #:cl-arno))
 (in-package :cl-arno-tests)
 
 (defstruct test-struct

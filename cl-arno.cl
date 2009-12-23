@@ -3,6 +3,7 @@
     (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:->))
 
 (in-package :cl-arno)
+(require 'asdf)
 (asdf:operate 'asdf:load-op 'cl-ppcre)
 #-abcl (asdf:operate 'asdf:load-op 'drakma)
 #-abcl (asdf:operate 'asdf:load-op 'sb-posix)
@@ -302,6 +303,7 @@
 (defun glob (path-or-stream &key binary)
   "Globs the whole provided file, url or stream into a string or into a byte array if <binary>"
   (cond
+    #-abcl
     ((and (stringp path-or-stream) (string-equal {path-or-stream 0 6} "http://"))
        (multiple-value-bind (body status-code headers real-url stream must-close reason-phrase)
                             (drakma:http-request path-or-stream :want-stream t :force-binary binary)
@@ -490,9 +492,11 @@
              do (setf {hash {args i}} {args (+ i 1)}))
        hash))
 
+#-abcl
 (defun slot-names (class)
   (mapcar #'closer-mop:slot-definition-name (closer-mop:class-slots (find-class class))))
 
+#-abcl
 (defun keys (o)
   (cond ((hash-table-p o)
           (loop for k being each hash-key of o collect k))
@@ -504,11 +508,13 @@
           (slot-names (class-of o)))
         (t nil)))
 
+#-abcl
 (defun slot-type (class slot)
   (dolist (s (closer-mop:class-slots (find-class class)))
      (when (eql (closer-mop:slot-definition-name s) slot)
         (return-from slot-type (closer-mop:slot-definition-type s)))))
 
+#-abcl
 (defun -> (o type &key exclude only unflatten)
   (declare (optimize debug))
   (cond
