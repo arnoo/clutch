@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o))
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:->))
 
 (in-package :cl-arno)
 (asdf:operate 'asdf:load-op 'cl-ppcre)
@@ -476,8 +476,52 @@
         ,@(foreach functions
            `(setf (fdefinition (quote ,it)) ,{gensyms @it}))))))
 
-(defmacro mkhash (&rest args)
+(defun mkhash (&rest args)
   (let ((hash (make-hash-table :test 'equal)))
        (loop for i from 0 below (length args) by 2
              do (setf {hash {args i}} {args (+ i 1)}))
        hash))
+
+(defun slot-names (class)
+  (mapcar #'closer-mop:slot-definition-name (closer-mop:class-slots (find-class class))))
+
+(defun keys (o)
+  (cond ((hash-table-p o)
+          (loop for k being each hash-key of o collect k))
+        ((and (listp o) (symbolp {o 0}) (evenp (length o)))
+          (loop for i from 0 below (length o) by 2 collect {o i}))
+        ((and (listp o) (consp {o 0}))
+          (mapcar #'car o))
+        ((eq (type-of o) 'standard-object)
+          (slot-names (class-of o)))
+        (t nil)))
+
+(defun slot-type (class slot)
+  (dolist (s (closer-mop:class-slots (find-class class)))
+     (when (eql (closer-mop:slot-definition-name s) slot)
+        (return-from slot-type (closer-mop:slot-definition-type s)))))
+
+(defun -> (o type &key exclude only unflatten)
+  (declare (optimize debug))
+  (cond
+     ((or (eq type t) (eq (type-of o) type))
+        o)
+     ((and (numberp o) (eq 'string type))
+        (format nil "~S" o))
+     ((and (keys o) (in '(alist plist hash-table) type))
+        (let ((o2 (case type
+                    ((plist alist) nil)
+                    (hash-table (make-hash-table)))))
+          (loop for key in (sort (or only (keys o)) [string> (str _) (str __)])
+                do (funcall (case type
+                              (plist [setf (getf o2 key) _])
+                              (alist [nconc o2 (list (cons key _))])
+                              (hash-table [setf (gethash key o2) _]))
+                          {o key}))
+          o2))
+     ((and (keys o) (or (subtypep type 'structure-object) (subtypep type 'standard-object)))
+        (apply (symb "MAKE-" type)
+          (loop for key in (or only (slot-names type))
+                collect (reread (symb ":" key))
+                collect (-> (if unflatten o {o key}) (slot-type type key) :unflatten unflatten :exclude exclude :only only))))
+     (t (cl:coerce o type))))
