@@ -52,7 +52,6 @@
            (cdr (assoc start object)))))
 
 (defun setaccess (object start &rest args)
-  (declare (optimize debug))
   (cond ((and (or (listp object) (vectorp object)) (numberp start))
            (if (> (length args) 1) (setf (subseq object start (car args)) (cadr args)) (setf (elt object start) (car args))))
         ((hash-table-p object)
@@ -78,6 +77,15 @@
   (set-macro-character #\} (get-macro-character #\) nil)))
 
 (enable-brackets)
+
+(defun compose-reader (stream char)
+  (declare (ignore char))
+  (prog1
+    (read-delimited-list #\) stream t)
+    (unread-char #\) stream)))
+
+(defun enable-compose ()
+  (set-macro-character #\! #'compose-reader))
 
 (defun pick (object &rest places)
   (mapcar [access object _] places))

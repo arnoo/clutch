@@ -1,6 +1,6 @@
 #!/bin/sh
 
-pacman -S gpg sbcl vim vim-colorsamplerpack tidy
+pacman -S gpg sbcl vim vim-colorsamplerpack tidy screen
 
 cp common-lisp-net-keyring.asc /tmp/keyring.asc
 #wget http://www.common-lisp.net/keyring.asc -O /tmp/keyring.asc
