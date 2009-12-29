@@ -1,6 +1,8 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:test #:test-suite #:with-mocks #:system #:getenv #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:->))
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:check #:test-suite #:with-mocks #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export)
+    #-abcl (:export #:getenv)
+	)
 
 (in-package :cl-arno)
 (require 'asdf)
@@ -405,6 +407,7 @@
               (error 'not-implemented :proc (list 'pipe-input prog args)))
 
 ; get-env from stumpwm (also found in the CL cookbook)
+#-abcl ;abcl has it predefined !
 (defun getenv (var)
   "Return the value of the environment variable."
   #+allegro       (sys::getenv (string var))
