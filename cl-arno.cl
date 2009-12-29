@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:check #:test-suite #:with-mocks #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export)
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:with-mocks #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw)
     #-abcl (:export #:getenv)
 	)
 
@@ -119,6 +119,9 @@
 ; symb by P.G. (On Lisp)
 (defun symb (&rest args)
   (values (intern (apply #'mkstr args))))
+
+(defun keyw (&rest args)
+  (values (intern (string-upcase (apply #'mkstr args)) "KEYWORD")))
 
 ; *** Paul Graham's anaphoric if (cf. On Lisp) ***
 (defmacro aif (test-form then-form &optional else-form)
@@ -375,19 +378,6 @@
 
 (defmacro str+= (place &rest args)
   `(setf ,place (apply #'str (list ,place ,@args))))
-(defun test (description output expected &key (test #'equal))
-  (princ description)
-  (if (funcall test output expected)
-      (progn (format t " -> ok~%") t)
-      (progn (format t " -> FAILED !~% ### OUTPUT ###~%") (describe output) (format t "### EXPECTED ###~%") (describe expected) nil)))
-
-(defmacro test-suite (name &rest body)
-  `(progn
-      (format t "*** ~A ***~%" ,name)
-      (block test-suite1
-             (loop for test in (quote ,body) do (unless (eval test) (progn (format t "aborting test suite~%~%") (return-from test-suite1))))
-             (format t "~%")
-             t)))
 
 ; System based on run-prog-collect-output from stumpwm
 (defun system (command)
@@ -542,3 +532,15 @@
                 collect (reread (symb ":" key))
                 collect (-> (if unflatten o {o key}) (slot-type type key) :unflatten unflatten :exclude exclude :only only))))
      (t (cl:coerce o type))))
+
+(defmacro defstruct-and-export (structure &rest members)
+	(append
+	 `(progn
+	 ,(append `(defstruct ,structure ,@members))
+	 ,`(export ,`(quote ,(intern (concatenate 'string "MAKE-"
+	 (symbol-name structure))))) ,`(export ,`(quote ,(intern
+	 (concatenate 'string "COPY-" (symbol-name structure))))))
+	 (mapcar
+		 #'(lambda (member)
+			 `(export ,`(quote ,(intern (concatenate 'string (symbol-name structure) "-" (symbol-name (if (listp member) (car member) member)))))))
+		 members)))
