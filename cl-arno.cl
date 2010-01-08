@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:with-mocks #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw)
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw)
     #-abcl (:export #:getenv)
 	)
 
@@ -461,28 +461,6 @@
                         (when (not files-only) dirs)
                         (when recurse
                            (mapcar [ls _ :recurse recurse :files-only files-only :dirs-only dirs-only] dirs))))))))
-
-(defmacro with-mocks (mocks &rest body)
-  (let* ((functions (remove-duplicates (mapcar [if (listp (car _)) (caar _) (car _)] mocks)))
-         (gensyms   (mapcar [gensym] (range 1 (length functions)))))
-    `(let (,@(foreach functions
-            `(,{gensyms @it} (fdefinition (quote ,it)))))
-    (prog1
-        (progn
-          ,@(foreach functions as f
-            `(setf (fdefinition (quote ,f))
-                  (lambda (&rest args)
-                          (declare (ignorable args))
-                          (cond
-                            ,@(foreach (remove-if-not [and (listp (car _)) (eq (caar _) f)] mocks)
-                                 `((equal args (list ,(cadar it))) ,(cadr it)))
-                            (t ,(aif (remove-if-not [and (atom (car _)) (eq (car _) f)] mocks)
-                                      (cadar it)
-                                      '(error "unexpected arguments"))))
-                          )))
-          ,@(macroexpand body))
-        ,@(foreach functions
-           `(setf (fdefinition (quote ,it)) ,{gensyms @it}))))))
 
 (defun mkhash (&rest args)
   (let ((hash (make-hash-table :test 'equal)))
