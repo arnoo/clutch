@@ -23,11 +23,11 @@
 (defmacro with-mocks (mocks &rest body)
   (let* ((functions (remove-duplicates (mapcar [if (listp (car _)) (caar _) (car _)] mocks)))
          (gensyms   (mapcar [gensym] (range 1 (length functions)))))
-    `(let (,@(foreach functions
-            `(,{gensyms @it} (fdefinition (quote ,it)))))
+    `(let (,@(loop for f in functions collect
+            `(,{gensyms f} (fdefinition (quote ,f)))))
     (prog1
         (progn
-          ,@(foreach functions as f
+          ,@(loop for f in functions collect
             `(setf (fdefinition (quote ,f))
                   (lambda (&rest args)
                           (declare (ignorable args))
@@ -39,5 +39,5 @@
                                       '(error "unexpected arguments"))))
                           )))
           ,@(macroexpand body))
-        ,@(foreach functions
-           `(setf (fdefinition (quote ,it)) ,{gensyms @it}))))))
+        ,@(loop for f in functions collect
+           `(setf (fdefinition (quote ,f)) ,{gensyms f}))))))
