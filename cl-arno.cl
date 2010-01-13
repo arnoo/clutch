@@ -50,7 +50,10 @@
         ((hash-table-p object)
            (if args (mapcar [gethash _ object] (cons start args)) (gethash start object)))
 	((typep object 'structure-object)
-	   (slot-value object start))
+     #-abcl
+	   (slot-value object start)
+     #+abcl
+     (eval (list (symb (uc (str (type-of object) "-" start))) object)))
         ((and (symbolp start) (symbolp (elt object 0)) (evenp (length object)))
            (getf object start))
         ((and (symbolp start) (consp (elt object 0)))
@@ -63,7 +66,10 @@
         ((hash-table-p object)
            (setf (gethash start object) (car args)))
 	((typep object 'structure-object)
-	   (setf (slot-value object start) (car args)))
+     #-abcl
+	   (setf (slot-value object start) (car args))
+     #+abcl
+     (eval (list 'setf (list (symb (uc (str (type-of object) "-" start))) object) (car args))))
         ((and (symbolp start) (symbolp (elt object 0)) (evenp (length object)))
            (if #1=(getf object start)
              (setf #1# (car args))
