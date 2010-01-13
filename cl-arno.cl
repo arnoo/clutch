@@ -318,7 +318,7 @@
   "Globs the whole provided file, url or stream into a string or into a byte array if <binary>"
   (cond
     #-abcl
-    ((and (stringp path-or-stream) (string-equal {path-or-stream 0 6} "http://"))
+    ((and (stringp path-or-stream) (> (length path-or-stream) 5) (string-equal {path-or-stream 0 6} "http://"))
        (multiple-value-bind (body status-code headers real-url stream must-close reason-phrase)
                             (drakma:http-request path-or-stream :want-stream t :force-binary binary)
             (declare (ignorable headers real-url stream must-close reason-phrase))
