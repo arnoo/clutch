@@ -216,9 +216,7 @@
     (if (listp string-or-list)
         (let ((matching (remove-if-not [cl-ppcre:scan regexp _] string-or-list)))
              (if match-nb1
-                 (if match-nb2
-                     (~ re (nth match-nb1 matching) match-nb2)
-                     (nth match-nb1 matching))
+                 (mapcar [~ re _ match-nb1 match-nb2] matching)
                  matching))
         (let ((match-indexes (cl-ppcre:all-matches regexp string-or-list)))
            (when match-indexes
