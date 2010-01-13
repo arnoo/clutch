@@ -384,24 +384,24 @@
 (defmacro str+= (place &rest args)
   `(setf ,place (apply #'str (list ,place ,@args))))
 
-; System based on run-prog-collect-output from stumpwm
+; System based on run-prog-collect-output from stumpwm (GPL)
 (defun system (command)
   "run a command and read its output."
   (with-input-from-string (ar command)
-    #+allegro (with-output-to-string (s) (excl:run-shell-command (format nil "~a~{ ~a~}" prog args)
-                                                                  :output s :wait t :input ar))
+    #+allegro (with-output-to-string (s) (excl:run-shell-command "/bin/sh" :output s :wait t :input ar))
     #+clisp   (with-output-to-string (s)
-                (let ((out (ext:run-program prog :arguments () :input ar :wait t :output :stream)))
+                (let ((out (ext:run-program "/bin/sh" :arguments () :input ar :wait t :output :stream)))
                   (loop for i = (read-char out nil out)
                         until (eq i out)
                         do (write-char i s))))
     #+cmu     (with-output-to-string (s) (ext:run-program "/bin/sh" () :input ar :output s :error s :wait t))
     #+sbcl    (with-output-to-string (s) (sb-ext:run-program "/bin/sh" () :input ar :output s :error s :wait t)))
     #+ccl     (with-output-to-string (s) (ccl:run-program "/bin/sh" () :wait t :output s :error t :input ar))
-    #-(or allegro clisp cmu sbcl ccl)
+    #+abcl    (with-output-to-string (s) (ext:run-shell-command command :output s))
+    #-(or allegro clisp cmu sbcl ccl abcl)
               (error 'not-implemented :proc (list 'pipe-input prog args)))
 
-; get-env from stumpwm (also found in the CL cookbook)
+; get-env from stumpwm (also found in the CL cookbook) (GPL or better)
 #-abcl ;abcl has it predefined !
 (defun getenv (var)
   "Return the value of the environment variable."
