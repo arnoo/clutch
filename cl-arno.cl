@@ -8,7 +8,7 @@
 (require 'asdf)
 (asdf:operate 'asdf:load-op 'cl-ppcre)
 #-abcl (asdf:operate 'asdf:load-op 'drakma)
-#-abcl (asdf:operate 'asdf:load-op 'sb-posix)
+#+sbcl (asdf:operate 'asdf:load-op 'sb-posix)
 #-abcl (asdf:operate 'asdf:load-op 'closer-mop)
 
 ; **** Lambda expressions ala Arc by Brad Ediger ***
