@@ -281,8 +281,8 @@
 ;*** x a la perl/python/ruby ***
 (defun x (seq nb)
   "returns a sequence composed of <nb> times <sequence>"
-  (let ((s seq))
-    (loop for i from 1 below nb do (setf s (concatenate 'sequence s seq)))
+  (let ((s ""))
+    (loop for i below nb do (setf s (concatenate (class-of seq) s seq)))
     (coerce s (class-of seq))))
 
 (defmacro foreach (list &rest body)
