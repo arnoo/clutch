@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw)
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave)
     #-abcl (:export #:getenv)
 	)
 
@@ -449,8 +449,11 @@
 (defun filesize (filepath)
   (with-open-file (s filepath) (file-length s)))
 
+(defun rm (file)
+  (delete-file file))
+
 (defun ls (dir &key recurse files-only dirs-only)
-   #+(or :sbcl :cmu :scl :lispworks)
+   #+(or :sbcl :cmu :scl :lispworks :abcl)
     (let* ((contents (directory (str dir "/*.*")))
            (dirs nil)
            (files nil))
@@ -522,12 +525,47 @@
 
 (defmacro defstruct-and-export (structure &rest members)
 	(append
-	 `(progn
-	 ,(append `(defstruct ,structure ,@members))
-	 ,`(export ,`(quote ,(intern (concatenate 'string "MAKE-"
-	 (symbol-name structure))))) ,`(export ,`(quote ,(intern
-	 (concatenate 'string "COPY-" (symbol-name structure))))))
-	 (mapcar
-		 #'(lambda (member)
-			 `(export ,`(quote ,(intern (concatenate 'string (symbol-name structure) "-" (symbol-name (if (listp member) (car member) member)))))))
-		 members)))
+	  `(progn
+	  ,(append `(defstruct ,structure ,@members))
+	  ,`(export ,`(quote ,(intern (concatenate 'string "MAKE-"
+	  (symbol-name structure))))) ,`(export ,`(quote ,(intern
+	  (concatenate 'string "COPY-" (symbol-name structure))))))
+	  (mapcar
+	 	 #'(lambda (member)
+	 		 `(export ,`(quote ,(intern (concatenate 'string (symbol-name structure) "-" (symbol-name (if (listp member) (car member) member)))))))
+	 	 members)))
+
+(defun fsave (object dir &key timestamped id id-slot)
+  (let ((lock (str dir "/.cl-arno_lock")))
+    (unless timestamped
+      (loop while (ls lock) do (sleep 0.1))
+      (unglob lock ""))
+    (unless id (setf id (aif (and id-slot {object 'id-slot})
+                             it
+                             (let ((items (~ "/^.*\\/(.*)(###|$)/" (!~ "/\\/\\.[^\\/]*$/" (ls dir)) 1)))
+                                (if items
+                                    (if (= (length (~ "/^\\d+$/" items)) (length items))
+                                        (+ 1 (apply #'max (mapcar #'read-from-string items)))
+                                        (let ((i (str (gensym)))) ; FIXME: this is very stupid (don't use as is)
+                                             (loop while (ls i) do (setf i (str (gensym))))
+                                             i))
+                                    0)))))
+    (unglob (str dir "/" id (if timestamped
+                                (str "###" (apply #'format
+                                                  (append '(nil "~4,'0D~2,'0D~2,'0D~2,'0D~2,'0D~2,'0D")
+                                                          (pick (multiple-value-list (get-decoded-time))
+                                                                5 4 3 2 1 0))))))
+            object)
+    (when id-slot (setf {object 'id-slot} id))
+    (unless timestamped
+      (rm lock))
+      id))
+
+(defun fload (dir id &key version)
+  (unless version
+    (awhen (~ (str "/\\/" id "###(\\d+)$/") (ls dir) 1)
+      (setf version (apply #'max (mapcar #'read-from-string it)))))
+  (read-from-string (glob (str dir "/" id (aif version (str "###" it))))))
+
+;(defun fselect (what &key from where)
+;  )
