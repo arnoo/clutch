@@ -478,11 +478,13 @@
              do (setf {hash {args i}} {args (+ i 1)}))
        hash))
 
-#-abcl
 (defun slot-names (class)
-  (mapcar #'closer-mop:slot-definition-name (closer-mop:class-slots (find-class class))))
+  #+sbcl(mapcar #'closer-mop:slot-definition-name (closer-mop:class-slots (find-class class)))
+  #-sbcl(let ((elts (mapcar [str _]
+                            (read-from-string (~s "/^.*?\\(/(/"
+                                                  (with-output-to-string (s) (prin1 (funcall (symb "NAKE-" class)) s)))))))
+          (loop for i from 1 below (length elts) by 2 collect {elts i})))
 
-#-abcl
 (defun keys (o)
   (cond ((hash-table-p o)
           (loop for k being each hash-key of o collect k))
@@ -491,8 +493,15 @@
         ((and (listp o) (consp {o 0}))
           (mapcar #'car o))
         ((eq (type-of o) 'standard-object)
-          (slot-names (class-of o)))
+          #+sbcl(slot-names (class-of o))
+          #-sbcl(let ((elts (mapcar [str _]
+                                    (read-from-string (~s "/^.*?\\(/(/"
+                                                          (with-output-to-string (s) (prin1 o s)))))))
+                   (loop for i from 1 below (length elts) by 2 collect {elts i})))
         (t nil)))
+
+(defun kvalues (o)
+  (mapcar [access o _] (keys o)))
 
 #-abcl
 (defun slot-type (class slot)
@@ -500,7 +509,6 @@
      (when (eql (closer-mop:slot-definition-name s) slot)
         (return-from slot-type (closer-mop:slot-definition-type s)))))
 
-#-abcl
 (defun -> (o type &key exclude only unflatten)
   (declare (optimize debug))
   (cond
@@ -512,8 +520,7 @@
         (let ((o2 (case type
                     ((plist alist) nil)
                     (hash-table (make-hash-table)))))
-          (loop for key in (sort (or only (keys o)) [string> (str _) (str __)])
-                do (funcall (case type
+          (loop for key in (sort (or only (keys o)) [string> (str _) (str __)]) do (funcall (case type
                               (plist [setf (getf o2 key) _])
                               (alist [nconc o2 (list (cons key _))])
                               (hash-table [setf (gethash key o2) _]))
