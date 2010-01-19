@@ -388,6 +388,9 @@
 (defmacro str+= (place &rest args)
   `(setf ,place (apply #'str (list ,place ,@args))))
 
+(defun pad (string chars &key (with " "))
+  (format nil (str "~" chars "<~A~;~>") string))
+
 ; System based on run-prog-collect-output from stumpwm (GPL)
 (defun system (command)
   "run a command and read its output."
