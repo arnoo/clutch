@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave)
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:mkdir)
     #-abcl (:export #:getenv)
 	)
 
@@ -269,9 +269,9 @@
   (if (= (length sep) 0)
       (coerce seq 'list)
       (loop for start = 0 then (+ end (length sep))
-                   for end = (search sep seq :start2 start)
-                          collecting {seq start (- (or end (length seq)) 1)}
-                                 while end)))
+            for end = (search sep seq :start2 start)
+            collecting {seq start (- (or end (length seq)) 1)}
+            while end)))
 
 (defun join (join-seq seq-list)
   (if (> (length seq-list) 1)
@@ -362,11 +362,11 @@
 
 (defmacro with-temporary-file (assignment &rest body)
   (destructuring-bind (filename extension) assignment
-                      `(let ((,filename (str "/tmp/highres_" (get-internal-real-time) (random 100) "." ,extension)))
-                          (prog1
-                             (progn
-                                ,@body)
-                             (delete-file ,filename)))))
+    `(let ((,filename (str "/tmp/highres_" (get-internal-real-time) (random 100) "." ,extension)))
+        (prog1
+           (progn
+              ,@body)
+           (delete-file ,filename)))))
 
 (defun f= (f &rest objects)
   (apply #'equal (mapcar f objects)))
@@ -471,6 +471,9 @@
                         (when (not files-only) dirs)
                         (when recurse
                            (mapcar [ls _ :recurse recurse :files-only files-only :dirs-only dirs-only] dirs))))))))
+
+(defun mkdir (dir)
+  (ensure-directories-exist (make-pathname :directory dir)))
 
 (defun mkhash (&rest args)
   (let ((hash (make-hash-table :test 'equal)))
