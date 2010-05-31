@@ -556,7 +556,7 @@
     (unless timestamped
       (loop while (ls lock) do (sleep 0.1))
       (unglob lock ""))
-    (unless id (setf id (aif (and id-slot {object 'id-slot})
+    (unless id (setf id (aif (and id-slot {object id-slot})
                              it
                              (let ((items (~ "/^.*\\/(.*)(###|$)/" (!~ "/\\/\\.[^\\/]*$/" (ls dir)) 1)))
                                 (if items
@@ -571,8 +571,9 @@
                                                   (append '(nil "~4,'0D~2,'0D~2,'0D~2,'0D~2,'0D~2,'0D")
                                                           (pick (multiple-value-list (get-decoded-time))
                                                                 5 4 3 2 1 0))))))
-            object)
-    (when id-slot (setf {object 'id-slot} id))
+            object
+            :if-exists :overwrite)
+    (when id-slot (setf {object id-slot} id))
     (unless timestamped
       (rm lock))
       id))
