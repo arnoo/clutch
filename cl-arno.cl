@@ -455,22 +455,25 @@
 (defun rm (file)
   (delete-file file))
 
-(defun ls (dir &key recurse files-only dirs-only)
-   #+(or :sbcl :cmu :scl :lispworks :abcl)
-    (let* ((contents (directory (str dir "/*.*")))
+(defun ls (path &key recurse files-only dirs-only)
+ #+(or :sbcl :cmu :scl :lispworks :abcl)
+  (if
+      (and (probe-file path) (not (probe-file (str path "/."))))
+      (list path)
+    (let* ((contents (directory (str path "/*.*")))
            (dirs nil)
            (files nil))
        (mapcar #'str
          (if (not (or recurse files-only dirs-only))
              contents
              (progn
-               (loop for path in contents
-                     when (directory (str path "/")) do (push path dirs)
-                     when (not (or dirs-only (directory (str path "/")))) do (push path files))
+               (loop for subpath in contents
+                     when (directory (str subpath "/")) do (push subpath dirs)
+                     when (not (or dirs-only (directory (str subpath "/")))) do (push subpath files))
                (flatten (when (not dirs-only) files)
                         (when (not files-only) dirs)
                         (when recurse
-                           (mapcar [ls _ :recurse recurse :files-only files-only :dirs-only dirs-only] dirs))))))))
+                           (mapcar [ls _ :recurse recurse :files-only files-only :dirs-only dirs-only] dirs)))))))))
 
 (defun mkdir (dir)
   (ensure-directories-exist (make-pathname :directory dir)))
