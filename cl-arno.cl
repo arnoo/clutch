@@ -8,8 +8,8 @@
 (require 'asdf)
 (asdf:operate 'asdf:load-op 'cl-ppcre)
 #-abcl (asdf:operate 'asdf:load-op 'drakma)
-#+sbcl (asdf:operate 'asdf:load-op 'sb-posix)
-#-abcl (asdf:operate 'asdf:load-op 'closer-mop)
+#+sbcl (require 'sb-posix)
+#+sbcl (require 'closer-mop)
 
 ; **** Lambda expressions ala Arc by Brad Ediger ***
 ;CL-USER> ([+ 1 _] 10)
@@ -40,10 +40,10 @@
   (cond ((null object) nil)
         ((and (or (listp object) (vectorp object)) (numberp start))
            (if (and args (car args))
-               (if (or (> (car args) (- (length object) 1)) (and (minusp (car args)) (> (- (car args)) (+ (length object) 1))))
+               (if (or (> (car args) (length object)) (and (minusp (car args)) (> (- (car args)) (+ (length object) 1))))
                    (error "Second index out of bounds")
-                   (subseq object start 
-                                  (if (>= (car args) 0) (+ (car args) 1) (+ (length object) 1 (car args)))))
+                   (subseq object (if (>= start 0) start (+ 1 (length object) start))
+                                  (if (>= (car args) 0) (car args) (+ (length object) 1 (car args)))))
                (elt object start)))
         ((functionp object)
            (apply object (cons start args)))
@@ -270,7 +270,7 @@
       (coerce seq 'list)
       (loop for start = 0 then (+ end (length sep))
             for end = (search sep seq :start2 start)
-            collecting {seq start (- (or end (length seq)) 1)}
+            collecting {seq start (or end (length seq))}
             while end)))
 
 (defun join (join-seq seq-list)
