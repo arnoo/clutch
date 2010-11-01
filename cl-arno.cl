@@ -1,12 +1,13 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:mkdir)
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:mkdir #:md5 #:sha1 #:sha256)
     #-abcl (:export #:getenv)
 	)
 
 (in-package :cl-arno)
 (require 'asdf)
 (asdf:operate 'asdf:load-op 'cl-ppcre)
+(asdf:operate 'asdf:load-op 'ironclad)
 #-abcl (asdf:operate 'asdf:load-op 'drakma)
 #+sbcl (require 'sb-posix)
 #+sbcl (require 'closer-mop)
@@ -51,13 +52,13 @@
            (if args (mapcar [gethash _ object] (cons start args)) (gethash start object)))
 	((typep object 'structure-object)
      #-abcl
-	   (slot-value object start)
+	   (slot-value object (symb start))
      #+abcl
      (eval (list (symb (uc (str (type-of object) "-" start))) object)))
-        ((and (symbolp start) (symbolp (elt object 0)) (evenp (length object)))
-           (getf object start))
-        ((and (symbolp start) (consp (elt object 0)))
-           (cdr (assoc start object)))))
+        ((and (or (symbolp start) (stringp start)) (symbolp (elt object 0)) (evenp (length object)))
+           (getf object (symb start)))
+        ((and (or (symbolp start) (stringp start)) (consp (elt object 0)))
+           (cdr (assoc (symb start) object)))))
 
 (defun setaccess (object start &rest args)
   (cond ((and (or (listp object) (vectorp object))
@@ -66,19 +67,16 @@
         ((hash-table-p object)
            (setf (gethash start object) (car args)))
 	((typep object 'structure-object)
-     #-abcl
-	   (setf (slot-value object start) (car args))
-     #+abcl
-     (eval (list 'setf (list (symb (uc (str (type-of object) "-" start))) object) (car args))))
-        ((and (symbolp start) (symbolp (elt object 0)) (evenp (length object)))
-           (if #1=(getf object start)
-             (setf #1# (car args))
-             (nconc object (list start (car args)))))
-        ((and (symbolp start) (consp (elt object 0)))
-           (if #2=(assoc start object)
-                (rplacd #2# (car args))
-                (nconc object (list (cons start (car args))))))
-        (t (error "Type not supported by setf {}"))))
+	   (setf (slot-value object start) (car args)))
+  ((and (symbolp start) (symbolp (elt object 0)) (evenp (length object)))
+     (if #1=(getf object start)
+       (setf #1# (car args))
+       (nconc object (list start (car args)))))
+  ((and (symbolp start) (consp (elt object 0)))
+     (if #2=(assoc start object)
+          (rplacd #2# (car args))
+          (nconc object (list (cons start (car args))))))
+  (t (error "Type not supported by setf {}"))))
 
 (defsetf access setaccess)
 
@@ -251,7 +249,8 @@
 ;*** Regexp substitution a la Perl (or nearly...) ***
 (defun ~s (re string-or-list &optional match-nb)
   "Replaces all substrings that match <re> in <string> by <replacement>.
-  <flags> can contain Perl regexp flags like g"
+  <flags> can contain Perl regexp flags like g
+  replacement can be a string which may contain the special substrings \\& for the whole match, \\` for the part of target-string before the match, \\' for the part of target-string after the match, \\N or \\{N} for the Nth register where N is a positive integer."
   (if (listp string-or-list)
     (mapcar [~s re _ match-nb] string-or-list)
     (destructuring-bind (regexp subre flags) (parse-re re)
@@ -360,6 +359,12 @@
   "Globs the whole provided file, url or stream into an array of its lines"
   (resplit "/\\r\\n|\\n/" (glob path-or-stream)))
 
+(defun with-each-line (path-or-stream)
+  (with-open-file (s file)
+    (do ((l (read-line s) (read-line s nil 'eof)))
+        ((eq l 'eof) "Reach end of file")
+        (print l))))
+
 (defmacro with-temporary-file (assignment &rest body)
   (destructuring-bind (filename extension) assignment
     `(let ((,filename (str "/tmp/highres_" (get-internal-real-time) (random 100) "." ,extension)))
@@ -391,8 +396,8 @@
 (defun pad (string chars &key (with " "))
   (format nil (str "~" chars "<~A~;~>") string))
 
-; System based on run-prog-collect-output from stumpwm (GPL)
-(defun system (command)
+; sh based on run-prog-collect-output from stumpwm (GPL)
+(defun sh (command)
   "run a command and read its output."
   (with-input-from-string (ar command)
     #+allegro (with-output-to-string (s) (excl:run-shell-command "/bin/sh" :output s :wait t :input ar))
@@ -407,6 +412,10 @@
     #+abcl    (with-output-to-string (s) (ext:run-shell-command command :output s))
     #-(or allegro clisp cmu sbcl ccl abcl)
               (error 'not-implemented :proc (list 'pipe-input prog args)))
+
+; for backwards compatibility
+(defun system (command)
+  (sh command))
 
 ; get-env from stumpwm (also found in the CL cookbook) (GPL or better)
 #-abcl ;abcl has it predefined !
@@ -542,14 +551,13 @@
 (defmacro defstruct-and-export (structure &rest members)
 	(append
 	  `(progn
-	  ,(append `(defstruct ,structure ,@members))
-	  ,`(export ,`(quote ,(intern (concatenate 'string "MAKE-"
-	  (symbol-name structure))))) ,`(export ,`(quote ,(intern
-	  (concatenate 'string "COPY-" (symbol-name structure))))))
-	  (mapcar
-	 	 #'(lambda (member)
-	 		 `(export ,`(quote ,(intern (concatenate 'string (symbol-name structure) "-" (symbol-name (if (listp member) (car member) member)))))))
-	 	 members)))
+      ,(append `(defstruct ,structure ,@members))
+      ,`(export ,`(quote ,(intern (concatenate 'string "MAKE-" (symbol-name structure)))))
+      ,`(export ,`(quote ,(intern (concatenate 'string "COPY-" (symbol-name structure))))))
+     (mapcar
+       #'(lambda (member)
+           `(export ,`(quote ,(intern (concatenate 'string (symbol-name structure) "-" (symbol-name (if (listp member) (car member) member)))))))
+       members)))
 
 (defun fsave (object dir &key timestamped id id-slot)
   (let ((lock (str dir "/.cl-arno_lock")))
@@ -566,14 +574,17 @@
                                              (loop while (ls i) do (setf i (str (gensym))))
                                              i))
                                     0)))))
-    (unglob (str dir "/" id (if timestamped
-                                (str "###" (apply #'format
-                                                  (append '(nil "~4,'0D~2,'0D~2,'0D~2,'0D~2,'0D~2,'0D")
-                                                          (pick (multiple-value-list (get-decoded-time))
-                                                                5 4 3 2 1 0))))))
-            object
-            :if-exists :overwrite)
     (when id-slot (setf {object id-slot} id))
+    (let ((file (str dir "/" id (if timestamped
+                                  (str "###" (apply #'format
+                                                    (append '(nil "~4,'0D~2,'0D~2,'0D~2,'0D~2,'0D~2,'0D")
+                                                             (pick (multiple-value-list (get-decoded-time))
+                                                                   5 4 3 2 1 0))))))))
+      (with-open-file (stream file
+                              :direction :output
+                              :if-exists :overwrite
+                              :if-does-not-exist :create)
+        (prin1 object stream)))
     (unless timestamped
       (rm lock))
       id))
@@ -584,5 +595,33 @@
       (setf version (apply #'max (mapcar #'read-from-string it)))))
   (read-from-string (glob (str dir "/" id (aif version (str "###" it))))))
 
-;(defun fselect (what &key from where)
-;  )
+(defun fselect (from &key key value)
+  (remove-if-not [equal {_ key} value]
+     (mapcar [fload from _]
+             (split "\n" (sh (str "cd from && grep -l " (~s "/-/\\-/g" value) "*"))))))
+
+(defmacro ironclad-digest (obj algo)
+  `(ironclad:byte-array-to-hex-string
+       (ironclad:digest-sequence ,algo
+           (cond ((stringp ,obj) (ironclad:ascii-string-to-byte-array ,obj))
+                 ((arrayp ,obj) ,obj)))))
+
+(defun sha1 (obj)
+  (ironclad-digest obj :sha1))
+
+(defun sha256 (obj)
+  (ironclad-digest obj :sha256))
+
+(defun md5 (obj)
+  (ironclad-digest obj :md5))
+
+;(defun memoize-to-disk (function &optional (dir "/tmp/"))
+;    (lambda (&rest args) 
+;      (let ((file (str dir "/"
+;                       (~ "/\{([A-E0-9]+)\}/" (str (package-name *package*) function) 1)
+;                       "#" (sha256 (str args)))))
+;           (if (ls file)
+;               (read-from-string (glob file))
+;               (let ((res (apply function args)))
+;                    (unglob file res)
+;                    res)))))
