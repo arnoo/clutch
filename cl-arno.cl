@@ -1,8 +1,7 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:mkdir #:md5 #:sha1 #:sha256)
-    #-abcl (:export #:getenv)
-	)
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:mkdir #:md5 #:sha1 #:sha256 #:memoize-to-disk)
+    #-abcl (:export #:getenv))
 
 (in-package :cl-arno)
 (require 'asdf)
@@ -345,14 +344,18 @@
                                                    ((eq x s))
                                                    (write-char x out)))))))
 
-(defun unglob (filename sequence &key if-exists)
+(defun unglob (filename object &key if-exists binary readable)
   (progn
     (with-open-file (stream filename
                             :direction :output
-                            :element-type (if (stringp sequence) 'character '(unsigned-byte 8))
+                            :element-type (if binary '(unsigned-byte 8) 'character)
                             :if-exists if-exists
                             :if-does-not-exist :create)
-      (write-sequence sequence stream))
+      (if (and (not readable)
+               (or (stringp object)
+                   (and (vectorp object) binary)))
+        (write-sequence object stream)
+        (prin1 object stream)))
     t))
 
 (defun glob-lines (path-or-stream)
@@ -580,11 +583,7 @@
                                                     (append '(nil "~4,'0D~2,'0D~2,'0D~2,'0D~2,'0D~2,'0D")
                                                              (pick (multiple-value-list (get-decoded-time))
                                                                    5 4 3 2 1 0))))))))
-      (with-open-file (stream file
-                              :direction :output
-                              :if-exists :overwrite
-                              :if-does-not-exist :create)
-        (prin1 object stream)))
+      (unglob file object :readable t))
     (unless timestamped
       (rm lock))
       id))
@@ -615,13 +614,20 @@
 (defun md5 (obj)
   (ironclad-digest obj :md5))
 
-;(defun memoize-to-disk (function &optional (dir "/tmp/"))
-;    (lambda (&rest args) 
-;      (let ((file (str dir "/"
-;                       (~ "/\{([A-E0-9]+)\}/" (str (package-name *package*) function) 1)
-;                       "#" (sha256 (str args)))))
-;           (if (ls file)
-;               (read-from-string (glob file))
-;               (let ((res (apply function args)))
-;                    (unglob file res)
-;                    res)))))
+(defun memoize-to-disk (function &key (dir "/tmp") prefix force-reset)
+  (unless prefix
+    (setf prefix (~ "/cl-arno-mem-\{([A-E0-9]+)\}/" (str function) 1))
+    (setf force-reset t))
+  (when force-reset (sh (str "rm -f " dir "/" prefix "#*" )))
+  (lambda (&rest args) 
+    (let ((file (str dir "/"
+                     prefix
+                     "#" (sha256 (str args)))))
+       (loop while (ls (str "." file ".lock")) do (sleep 0.01))
+       (if (ls file)
+           (read-from-string (glob file))
+           (let ((lock (sh (str "touch ." file ".lock")))
+                 (res (apply function args)))
+              (unglob file res :readable t)
+              (sh (str "rm -f ." file ".lock"))
+              res)))))
