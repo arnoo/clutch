@@ -605,7 +605,7 @@
 (defun fselect (from &key key value)
   (remove-if-not [equal {_ key} value]
      (mapcar [fload from _]
-             (split "\n" (sh (str "cd from && grep -l " (~s "/-/\\-/g" value) "*"))))))
+             (re-split "/\\n/" (sh (str "cd \"" from "\" && grep -l \"" (~s "/-/\\-/g" (str value)) "\" *"))))))
 
 (defmacro ironclad-digest (obj algo)
   `(ironclad:byte-array-to-hex-string
