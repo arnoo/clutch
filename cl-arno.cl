@@ -5,8 +5,8 @@
 
 (in-package :cl-arno)
 (require 'asdf)
-(asdf:operate 'asdf:load-op 'cl-ppcre)
-(asdf:operate 'asdf:load-op 'ironclad)
+(asdf:operate 'asdf:load-op 'cl-ppcre :verbose nil)
+(asdf:operate 'asdf:load-op 'ironclad :verbose nil)
 #-abcl (asdf:operate 'asdf:load-op 'drakma)
 #+sbcl (require 'sb-posix)
 #+sbcl (require 'closer-mop)
