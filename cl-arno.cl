@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:mkdir #:md5 #:sha1 #:sha256 #:memoize-to-disk)
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:mkdir #:md5 #:sha1 #:sha256 #:memoize-to-disk #:with-each-line)
     #-abcl (:export #:getenv))
 
 (in-package :cl-arno)
@@ -370,11 +370,11 @@
   "Globs the whole provided file, url or stream into an array of its lines"
   (resplit "/\\r\\n|\\n/" (glob path-or-stream)))
 
-(defun with-each-line (path-or-stream)
-  (with-open-file (s file)
-    (do ((l (read-line s) (read-line s nil 'eof)))
-        ((eq l 'eof) "Reach end of file")
-        (print l))))
+(defmacro with-each-line (path-or-stream &rest body)
+  `(with-open-file (s ,path-or-stream)
+    (do ((it (read-line s) (read-line s nil 'eof)))
+        ((eq it 'eof) (values))
+        (progn ,@body))))
 
 (defmacro with-temporary-file (assignment &rest body)
   (destructuring-bind (filename extension) assignment
