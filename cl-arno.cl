@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:mkdir #:md5 #:sha1 #:sha256 #:memoize-to-disk #:with-each-line)
+    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:mkdir #:md5 #:sha1 #:sha256 #:memoize-to-disk #:with-each-line #:utc #:localtime)
     #-abcl (:export #:getenv))
 
 (in-package :cl-arno)
@@ -639,3 +639,16 @@
               (unglob file res :readable t)
               (sh (str "rm -f ." file ".lock"))
               res)))))
+
+(defun utc (&optional str)
+  (if str
+    (let ((result (sh (str "date -d \"" str "\" +%s"))))
+         (if (!~ "/^\\d+\\n$/" result)
+             (error result)
+             (+ (read-from-string result) 2208988800))) ; CL dates start in 1900, not 1970 like unix dates
+    (get-universal-time)))
+
+(defun localtime (&optional str)
+  (- (utc str)
+     (* {(multiple-value-list (get-decoded-time)) -1}
+        3600)))
