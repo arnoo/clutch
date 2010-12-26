@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:mkdir #:md5 #:sha1 #:sha256 #:memoize-to-disk #:with-each-line #:utc #:localtime)
+    (:export  #:date #:d- #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:fselect1 #:mkdir #:md5 #:sha1 #:sha256 #:memoize-to-disk #:with-each-line #:ut #:miltime #:y-m-d)
     #-abcl (:export #:getenv))
 
 (in-package :cl-arno)
@@ -47,7 +47,7 @@
              (if end
                  (if (or (> end len)
                          (and (minusp end)
-                              (<= end (- len))))
+                              (< end (- -1 len))))
                    (error "Second index out of bounds")
                    (subseq object (mod start len)
                                   (if (minusp end) (+ len 1 end)
@@ -70,7 +70,9 @@
 (defun setaccess (object start &rest args)
   (cond ((and (or (listp object) (vectorp object))
               (numberp start))
-           (if (> (length args) 1) (setf (subseq object start (car args)) (cadr args)) (setf (elt object start) (car args))))
+           (if (cdr args) 
+              (setf (subseq object start (car args)) (cadr args))
+              (setf (elt object start) (car args))))
         ((hash-table-p object)
            (setf (gethash start object) (car args)))
 	((typep object 'structure-object)
@@ -121,7 +123,7 @@
 ;*** in ala python ***
 (defun in (seq elmt)
 	"does seq contain elmt ?"
-	(if (position elmt seq :test #'equal) t nil))
+	(not (null (position elmt seq :test #'equal))))
 
 ; mkstr by P.G. (On Lisp)
 (defun mkstr (&rest args)
@@ -172,13 +174,13 @@
   "Executes <body> with <it> bound to <expr>"
 	`(let ((it ,expr)) ,@body))
 
-(defun lc (string)
-  "Converts a string to lowercase (shortcut for string-downcase)"
-  (string-downcase string))
+(defun lc (object)
+  "Converts an object to a lowercase string"
+  (string-downcase (str object)))
 
-(defun uc (string)
-  "Converts a string to uppercase (shortcut for string-upcase)"
-  (string-upcase string))  
+(defun uc (object)
+  "Converts an object to an uppercase string"
+  (string-upcase (str object)))
 
 ; *** Paul Graham's anaphoric function from arc ***
 ; CL version from http://setagaya.googlecode.com/svn-history/r25/trunk/home/mc/arc-compat/anaphoric-op.lisp
@@ -280,7 +282,7 @@
             while end)))
 
 (defun join (join-seq seq-list)
-  (if (> (length seq-list) 1)
+  (if (cdr seq-list)
       (concatenate (class-of join-seq) (car seq-list) join-seq (join join-seq (cdr seq-list)))
       (car seq-list)))
 
@@ -404,7 +406,10 @@
 (defmacro str+= (place &rest args)
   `(setf ,place (apply #'str (list ,place ,@args))))
 
-(defun pad (string chars &key (with " "))
+(defun rpad (string chars &key (with " "))
+  (format nil (str "~" chars "<~A~;~>") string))
+
+(defun lpad (string chars &key (with " "))
   (format nil (str "~" chars "<~A~;~>") string))
 
 ; sh based on run-prog-collect-output from stumpwm (GPL)
@@ -591,7 +596,7 @@
                                                     (append '(nil "~4,'0D~2,'0D~2,'0D~2,'0D~2,'0D~2,'0D")
                                                              (pick (multiple-value-list (get-decoded-time))
                                                                    5 4 3 2 1 0))))))))
-      (unglob file object :readable t))
+      (unglob file object :readable t :if-exists :supersede))
     (unless timestamped
       (rm lock))
       id))
@@ -602,10 +607,25 @@
       (setf version (apply #'max (mapcar #'read-from-string it)))))
   (read-from-string (glob (str dir "/" id (aif version (str "###" it))))))
 
-(defun fselect (from &key key value)
-  (remove-if-not [equal {_ key} value]
-     (mapcar [fload from _]
-             (re-split "/\\n/" (sh (str "cd \"" from "\" && grep -l \"" (~s "/-/\\-/g" (str value)) "\" *"))))))
+(defun fselect1 (from &key key value)
+  (aif (fselect from :key key :value value :limit 1)
+    (first it)
+    nil))
+
+(defun fselect (from &key key value limit)
+  (let ((lock (str from "/.cl-arno_lock"))
+        (loaded 0))
+      (loop while (ls lock) do (sleep 0.1))
+  (remove-if-not [and _ (equal {_ key} value)]
+     (mapcar [if (or (not limit) (< loaded limit))
+                 (progn
+                     (incf loaded)
+                     (fload from _))
+                 nil]
+             (resplit "/\\n/" (sh (str "cd '" from "' && grep -l '"
+                                                             (str (prin1-to-string key) " "
+                                                                  (prin1-to-string value))
+                                                                   "' *")))))))
 
 (defmacro ironclad-digest (obj algo)
   `(ironclad:byte-array-to-hex-string
@@ -622,12 +642,12 @@
 (defun md5 (obj)
   (ironclad-digest obj :md5))
 
-(defun memoize-to-disk (function &key (dir "/tmp") prefix force-reset)
+(defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last remember-most-frequent)
   (unless prefix
-    (setf prefix (~ "/cl-arno-mem-\{([A-E0-9]+)\}/" (str function) 1))
+    (setf prefix (~ "/cl-arno-mem-\{([A-E0-9]+)\}/" (str fn) 1))
     (setf force-reset t))
   (when force-reset (sh (str "rm -f " dir "/" prefix "#*" )))
-  (lambda (&rest args) 
+  #'(lambda (&rest args) 
     (let ((file (str dir "/"
                      prefix
                      "#" (sha256 (str args)))))
@@ -635,20 +655,103 @@
        (if (ls file)
            (read-from-string (glob file))
            (let ((lock (sh (str "touch ." file ".lock")))
-                 (res (apply function args)))
+                 (res (apply fn args)))
               (unglob file res :readable t)
               (sh (str "rm -f ." file ".lock"))
               res)))))
 
-(defun utc (&optional str)
-  (if str
-    (let ((result (sh (str "date -d \"" str "\" +%s"))))
-         (if (!~ "/^\\d+\\n$/" result)
-             (error result)
-             (+ (read-from-string result) 2208988800))) ; CL dates start in 1900, not 1970 like unix dates
+; Memoize adapted from OnLisp
+(defun memoize (fn &key remember-last)
+  (let ((cache (mkhash))
+        (calls nil))
+     #'(lambda (&rest args)
+          (when remember-last
+            (push calls args))
+          (multiple-value-bind (val hit) (gethash args cache)
+            (if hit
+                val
+                (progn
+                  (when remember-last
+                     (when (> (hash-table-size cache) remember-last)
+                       (remhash cache {calls -1})
+                       (setf calls {calls 0 remember-last})))
+                  (setf (gethash args cache)
+                        (apply fn args))))))))
+
+(defstruct-and-export date
+  s m h
+  dow day month year
+  dst zone)
+
+(defun ut (&optional str-or-date)
+  (declare (optimize debug))
+  (if str-or-date
+    (if (stringp str-or-date)
+      (ut (date str-or-date))
+      (encode-universal-time
+         (date-s str-or-date)
+         (date-m str-or-date)
+         (date-h str-or-date)
+         (date-day str-or-date)
+         (date-month str-or-date)
+         (date-year str-or-date)
+         (+ (date-zone str-or-date) (if (date-dst str-or-date) 1 0))
+         ))
     (get-universal-time)))
 
-(defun localtime (&optional str)
-  (- (utc str)
-     (* {(multiple-value-list (get-decoded-time)) -1}
-        3600)))
+(defun strtout (str)
+  (let ((result (sh (str "date -d \"" str "\" +%s"))))
+    (if (!~ "/^\\d+\\n$/" result)
+        (error result)
+        (+ (read-from-string result) 2208988800))))
+
+(defun date (&optional timestamp-or-string zone)
+  (multiple-value-bind (s m h day month year dow daylight-p zone)
+                       (decode-universal-time 
+                          (aif timestamp-or-string
+                            (cond
+                              ((stringp it) (strtout it))
+                              ((and (numberp it) (< it 2400))
+                                   (strtout (str {it 0 2} ":" {it 2 4})))
+                              (t it))
+                            (get-universal-time))
+                          zone)
+  (make-date
+	  :s s
+	  :m m
+	  :h h
+	  :day day
+	  :month month
+	  :year year
+	  :dow dow
+	  :dst daylight-p
+	  :zone zone
+  )))
+
+(defun d- (date1 date2)
+  (- (ut date1) (ut date2)))
+
+(defun miltime (&optional (date (date (ut))))
+  (+ (* 100 (date-h date))
+     (date-m date)
+     (/ 100 (date-s date))))
+  
+(defun to-zone (date zone)
+  (date (ut date) zone))
+
+(defun y-m-d (date)
+  (str (date-year date) "-" (date-month date) "-" (date-day date)))
+
+(defun date-rfc-2822 (date)
+  (format t "~A, ~2,'0D ~A ~4,'0D ~2,'0D:~2,'0D:~2,'0D ~A"
+       {(list "Mon" "Tue" "Wen" "Thu" "Fri" "Sat" "Sun") (date-dow date)}
+       (date-day date)
+       {(list "" "Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec") (date-month date)}
+       (date-year date)
+       (date-h date)
+       (date-m date)
+       (date-s date)
+       (~s "/^(-|)(\\d{3})$/\\{1}0\\2/" (str (* 100 (date-zone date))))))
+
+(defun date-gnu (date format)
+  (sh (str "date -d '" (date-rfc-2822 date) "' +'" format "'")))
