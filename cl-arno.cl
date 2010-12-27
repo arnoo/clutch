@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:date #:d- #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:fselect1 #:mkdir #:md5 #:sha1 #:sha256 #:memoize-to-disk #:with-each-line #:ut #:miltime #:y-m-d)
+    (:export  #:date #:d- #:d+ #:d-delta #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:fselect1 #:mkdir #:md5 #:sha1 #:sha256 #:memoize-to-disk #:with-each-line #:ut #:miltime #:y-m-d)
     #-abcl (:export #:getenv))
 
 (in-package :cl-arno)
@@ -161,9 +161,9 @@
  
 
 (defmacro aunless (test-form &rest then-forms)
-    "Executes <body> with <it> bound to <expr> if <expr> is nil"
-    `(let ((it ,test-form))
-         (unless it ,@then-forms)))
+  "Executes <body> with <it> bound to <expr> if <expr> is nil"
+  `(let ((it ,test-form))
+     (unless it ,@then-forms)))
 
 ; *** Paul Graham's anaphoric while (cf. On Lisp) ***
 (defmacro awhile (expr &body body) 
@@ -322,8 +322,9 @@
 
 ; Reads a url/file/stream entirely then closes it and returns the contents as a string
 ; based on Shawn Betts's slurp http://www.emmett.ca/~sabetts/slurp.html
-(defun glob (path-or-stream &key binary)
-  "Globs the whole provided file, url or stream into a string or into a byte array if <binary>"
+(defun glob (path-or-stream &key binary offset limit)
+  "Globs the whole provided file, url or stream into a string or into a byte array if <binary>,
+  starting at offset. If offset is negative, start from end-offset. Read at most limit characters."
   (cond
     #-abcl
     ((and (stringp path-or-stream) (> (length path-or-stream) 5) (string-equal {path-or-stream 0 6} "http://"))
@@ -368,7 +369,7 @@
         (prin1 object stream)))
     t))
 
-(defun glob-lines (path-or-stream)
+(defun glob-lines (path-or-stream &key offset limit)
   "Globs the whole provided file, url or stream into an array of its lines"
   (resplit "/\\r\\n|\\n/" (glob path-or-stream)))
 
@@ -728,8 +729,14 @@
 	  :zone zone
   )))
 
-(defun d- (date1 date2)
+(defun d-delta (date1 date2)
   (- (ut date1) (ut date2)))
+
+(defun d+ (date seconds)
+  (date (+ (ut date) seconds) (date-zone date)))
+
+(defun d- (date seconds)
+  (d+ date (- seconds)))
 
 (defun miltime (&optional (date (date (ut))))
   (+ (* 100 (date-h date))
