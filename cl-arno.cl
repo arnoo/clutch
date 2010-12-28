@@ -11,6 +11,36 @@
 #+sbcl (require 'sb-posix)
 #+sbcl (require 'closer-mop)
 
+; mkstr by P.G. (On Lisp)
+(defun mkstr (&rest args)
+  (with-output-to-string (s)
+     (dolist (a args) (princ a s))))
+
+; reread by P.G. (On Lisp)
+(defun reread (&rest args)
+  (values (read-from-string (apply #'mkstr args))))
+
+; symb by P.G. (On Lisp)
+(defun symb (&rest args)
+  (values (intern (apply #'mkstr args))))
+
+(defun keyw (&rest args)
+  (values (intern (string-upcase (apply #'mkstr args)) "KEYWORD")))
+
+;flatten (Adapted from On Lisp)
+(defun flatten (&rest x)
+  (labels ((rec (x acc)
+                (cond ((null x) acc)
+                      ((atom x) (cons x acc))
+                      (t (rec (car x) (rec (cdr x) acc))))))
+          (rec x nil)))
+
+(defun str (&rest args)
+  (apply #'mkstr (remove-if-not #'identity (flatten args))))
+
+(defmacro str+= (place &rest args)
+  `(setf ,place (apply #'str (list ,place ,@args))))
+
 ; **** Lambda expressions ala Arc by Brad Ediger ***
 ;CL-USER> ([+ 1 _] 10)
 ;11
@@ -124,22 +154,6 @@
 (defun in (seq elmt)
 	"does seq contain elmt ?"
 	(not (null (position elmt seq :test #'equal))))
-
-; mkstr by P.G. (On Lisp)
-(defun mkstr (&rest args)
-  (with-output-to-string (s)
-     (dolist (a args) (princ a s))))
-
-; reread by P.G. (On Lisp)
-(defun reread (&rest args)
-  (values (read-from-string (apply #'mkstr args))))
-
-; symb by P.G. (On Lisp)
-(defun symb (&rest args)
-  (values (intern (apply #'mkstr args))))
-
-(defun keyw (&rest args)
-  (values (intern (string-upcase (apply #'mkstr args)) "KEYWORD")))
 
 ; *** Paul Graham's anaphoric if (cf. On Lisp) ***
 (defmacro aif (test-form then-form &optional else-form)
@@ -320,40 +334,66 @@
 			(loop for x from start to end by step collect x)		
 			(loop for x from start downto end by (- step) collect x))))
 
-; Reads a url/file/stream entirely then closes it and returns the contents as a string
-; based on Shawn Betts's slurp http://www.emmett.ca/~sabetts/slurp.html
-(defun glob (path-or-stream &key binary offset limit)
+(defmacro with-stream (args &rest body)
+  (destructuring-bind (name path-or-stream &key binary) args
+   `(cond ((streamp ,path-or-stream)
+             (let ((,name ,path-or-stream))
+                ,@body))
+          #-abcl
+          ((and (stringp ,path-or-stream) 
+                (> (length ,path-or-stream) 5)
+                (string-equal {,path-or-stream 0 6} "http://"))
+             (multiple-value-bind (response status-code headers real-url stream must-close reason-phrase)
+                                  (drakma:http-request ,path-or-stream :want-stream t :force-binary ,binary)
+                  (declare (ignorable headers real-url stream must-close reason-phrase))
+                (if (= 200 status-code)
+                  (let ((,name response))
+                    ,@body)
+                  (with-input-from-string (,name "")
+                    ,@body))))
+          ((and ,binary (stringp ,path-or-stream))
+             (with-open-file (,name ,path-or-stream :element-type '(unsigned-byte 8))
+                ,@body))
+          ((stringp ,path-or-stream)
+             (with-open-file (,name ,path-or-stream)
+                ,@body)))))
+
+(defun glob (path-or-stream &key binary (offset 0) limit)
   "Globs the whole provided file, url or stream into a string or into a byte array if <binary>,
   starting at offset. If offset is negative, start from end-offset. Read at most limit characters."
-  (cond
-    #-abcl
-    ((and (stringp path-or-stream) (> (length path-or-stream) 5) (string-equal {path-or-stream 0 6} "http://"))
-       (multiple-value-bind (body status-code headers real-url stream must-close reason-phrase)
-                            (drakma:http-request path-or-stream :want-stream t :force-binary binary)
-            (declare (ignorable headers real-url stream must-close reason-phrase))
-            (if (= 200 status-code) (glob body :binary binary) (if binary #() ""))))
-    ((and binary (stringp path-or-stream))
-       (with-open-file   (s path-or-stream :element-type '(unsigned-byte 8)) (glob s :binary t)))
-    ((stringp path-or-stream)
-       (with-open-file   (s path-or-stream)
-                         (let ((seq (make-array (file-length s) :element-type 'character :fill-pointer t)))
-                              (setf (fill-pointer seq) (read-sequence seq s))
-                              seq)))
-    ((and (streamp path-or-stream) binary)
-       (let ((buf (make-array 4096 :element-type '(unsigned-byte 8)))
-             (seq (make-array 0 :element-type '(unsigned-byte 8) :adjustable t)))
+  (if (or (streamp path-or-stream)
+          (and (stringp path-or-stream) 
+               (> (length path-or-stream) 5)
+               (string-equal {path-or-stream 0 6} "http://"))
+          (and binary (stringp path-or-stream)))
+    (with-stream (s path-or-stream :binary binary)
+       (let ((buf (if binary
+                        (make-array 4096 :element-type '(unsigned-byte 8))
+                        (make-string 4096)))
+             (seq (if binary
+                        (make-array 0 :element-type '(unsigned-byte 8) :adjustable t)
+                        (make-string 0))))
             (loop for index = 0 then (+ index pos)
-                  for pos = (read-sequence buf path-or-stream)
-                  while (plusp pos)
-                  do (adjust-array seq (+ index pos))
-                     (replace seq buf :start1 index :end2 pos))
-             seq))
-    ((streamp path-or-stream)
-       (with-open-stream (s path-or-stream)
-                        (with-output-to-string (out)
-                                               (do ((x (read-char s nil s) (read-char s nil s)))
-                                                   ((eq x s))
-                                                   (write-char x out)))))))
+                  for pos = (read-sequence buf s)
+                  with remoffset = offset
+                  while (and (plusp pos)
+                             (or (not limit)
+                                 (< pos (+ limit 4096))))
+                  do (when (and (> (+ index pos) offset))
+                        (if binary
+                          (adjust-array seq (or limit (- (+ index pos) offset)))
+                          (setf seq (concatenate 'string seq (make-string pos))))
+                        (replace seq buf
+                            :start1 index
+                            :start2 remoffset)
+                        (decf remoffset pos)))
+             (when (and binary (equal seq "")) (setf seq #()))
+             (aif limit {seq 0 (min it (length seq))} seq)))
+    (with-open-file (s path-or-stream)
+       (let ((seq (make-array (aif limit (min it (file-length s)) (file-length s)) :element-type 'character :fill-pointer t)))
+            (awhen offset (read-sequence (make-array it) s))
+            (setf (fill-pointer seq) (read-sequence seq s))
+            seq))))
 
 (defun unglob (filename object &key if-exists binary readable)
   (progn
@@ -369,15 +409,42 @@
         (prin1 object stream)))
     t))
 
-(defun glob-lines (path-or-stream &key offset limit)
-  "Globs the whole provided file, url or stream into an array of its lines"
-  (resplit "/\\r\\n|\\n/" (glob path-or-stream)))
+(defmacro with-each-fline (args &rest body)
+  (destructuring-bind (path-or-stream &key (offset 0) limit) args
+    `(with-stream (s ,path-or-stream)
+      (block read-loop
+        (let ((skipped-lines 0)
+              (done-lines 0))
+          (do ((it (read-line s) (read-line s nil 'eof)))
+              ((eq it 'eof) (values))
+              (if (>= skipped-lines ,offset)
+                (progn
+                  (when (and ,limit (>= done-lines ,limit))
+                    (return-from read-loop done-lines))
+                  (incf done-lines)
+                  ,@body)
+                (incf skipped-lines)))
+          done-lines)))))
 
-(defmacro with-each-line (path-or-stream &rest body)
-  `(with-open-file (s ,path-or-stream)
-    (do ((it (read-line s) (read-line s nil 'eof)))
-        ((eq it 'eof) (values))
-        (progn ,@body))))
+(defmacro with-each-line (args &rest body)
+  (destructuring-bind (str &key (offset 0) limit) args
+    `(with-input-from-string (s ,str)
+       (with-each-fline (s :offset ,offset :limit ,limit)
+         ,@body))))
+
+(defun glob-lines (path-or-stream &key (offset 0) limit)
+  "Globs the whole provided file, url or stream into an array of its lines."
+  (let ((lines nil))
+    (with-each-fline (path-or-stream :offset offset :limit limit)
+      (nconc lines (list it)))
+    lines))
+
+(defun mapflines (fn path-or-stream &key  (offset 0) limit)
+  "Apply fn to each line of path-or-stream."
+  (let ((lines nil))
+    (with-each-fline (path-or-stream :offset offset :limit limit)
+      (nconc lines (list (funcall fn it))))
+    lines))
 
 (defmacro with-temporary-file (assignment &rest body)
   (destructuring-bind (filename extension) assignment
@@ -393,24 +460,12 @@
 (defun f/= (&rest args)
   (not (apply #'f= args)))
 
-;flatten (Adapted from On Lisp)
-(defun flatten (&rest x)
-  (labels ((rec (x acc)
-                (cond ((null x) acc)
-                      ((atom x) (cons x acc))
-                      (t (rec (car x) (rec (cdr x) acc))))))
-          (rec x nil)))
-
-(defun str (&rest args)
-  (apply #'mkstr (remove-if-not #'identity (flatten args))))
-
-(defmacro str+= (place &rest args)
-  `(setf ,place (apply #'str (list ,place ,@args))))
-
 (defun rpad (string chars &key (with " "))
+  ;TODO : utiliser with
   (format nil (str "~" chars "<~A~;~>") string))
 
 (defun lpad (string chars &key (with " "))
+  ;TODO : utiliser with
   (format nil (str "~" chars "<~A~;~>") string))
 
 ; sh based on run-prog-collect-output from stumpwm (GPL)
@@ -608,11 +663,6 @@
       (setf version (apply #'max (mapcar #'read-from-string it)))))
   (read-from-string (glob (str dir "/" id (aif version (str "###" it))))))
 
-(defun fselect1 (from &key key value)
-  (aif (fselect from :key key :value value :limit 1)
-    (first it)
-    nil))
-
 (defun fselect (from &key key value limit)
   (let ((lock (str from "/.cl-arno_lock"))
         (loaded 0))
@@ -627,6 +677,11 @@
                                                              (str (prin1-to-string key) " "
                                                                   (prin1-to-string value))
                                                                    "' *")))))))
+
+(defun fselect1 (from &key key value)
+  (aif (fselect from :key key :value value :limit 1)
+    (first it)
+    nil))
 
 (defmacro ironclad-digest (obj algo)
   `(ironclad:byte-array-to-hex-string
@@ -643,7 +698,7 @@
 (defun md5 (obj)
   (ironclad-digest obj :md5))
 
-(defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last remember-most-frequent)
+(defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last)
   (unless prefix
     (setf prefix (~ "/cl-arno-mem-\{([A-E0-9]+)\}/" (str fn) 1))
     (setf force-reset t))
@@ -655,11 +710,11 @@
        (loop while (ls (str "." file ".lock")) do (sleep 0.01))
        (if (ls file)
            (read-from-string (glob file))
-           (let ((lock (sh (str "touch ." file ".lock")))
-                 (res (apply fn args)))
-              (unglob file res :readable t)
+           (awith (apply fn args)
+              (sh (str "touch ." file ".lock"))
+              (unglob file it :readable t)
               (sh (str "rm -f ." file ".lock"))
-              res)))))
+              it)))))
 
 ; Memoize adapted from OnLisp
 (defun memoize (fn &key remember-last)
@@ -683,22 +738,6 @@
   s m h
   dow day month year
   dst zone)
-
-(defun ut (&optional str-or-date)
-  (declare (optimize debug))
-  (if str-or-date
-    (if (stringp str-or-date)
-      (ut (date str-or-date))
-      (encode-universal-time
-         (date-s str-or-date)
-         (date-m str-or-date)
-         (date-h str-or-date)
-         (date-day str-or-date)
-         (date-month str-or-date)
-         (date-year str-or-date)
-         (+ (date-zone str-or-date) (if (date-dst str-or-date) 1 0))
-         ))
-    (get-universal-time)))
 
 (defun strtout (str)
   (let ((result (sh (str "date -d \"" str "\" +%s"))))
@@ -728,6 +767,22 @@
 	  :dst daylight-p
 	  :zone zone
   )))
+
+(defun ut (&optional str-or-date)
+  (declare (optimize debug))
+  (if str-or-date
+    (if (stringp str-or-date)
+      (ut (date str-or-date))
+      (encode-universal-time
+         (date-s str-or-date)
+         (date-m str-or-date)
+         (date-h str-or-date)
+         (date-day str-or-date)
+         (date-month str-or-date)
+         (date-year str-or-date)
+         (+ (date-zone str-or-date) (if (date-dst str-or-date) 1 0))
+         ))
+    (get-universal-time)))
 
 (defun d-delta (date1 date2)
   (- (ut date1) (ut date2)))
