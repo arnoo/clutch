@@ -358,14 +358,30 @@
              (with-open-file (,name ,path-or-stream)
                 ,@body)))))
 
+(defun looks-like-file (path-or-stream)
+  (not (or (streamp path-or-stream)
+           (and (stringp path-or-stream) 
+               (> (length path-or-stream) 5)
+               (string-equal {path-or-stream 0 6} "http://")))))
+  
+
 (defun glob (path-or-stream &key binary (offset 0) limit)
   "Globs the whole provided file, url or stream into a string or into a byte array if <binary>,
   starting at offset. If offset is negative, start from end-offset. Read at most limit characters."
-  (if (or (streamp path-or-stream)
-          (and (stringp path-or-stream) 
-               (> (length path-or-stream) 5)
-               (string-equal {path-or-stream 0 6} "http://"))
-          (and binary (stringp path-or-stream)))
+  (if (looks-like-file path-or-stream)
+    (with-open-file (s path-or-stream)
+       (let ((fl (file-length path-or-stream)))
+         (when (< 0 offset)
+           (setf offset (max (- fl offset) 0)))
+         (when (and limit (< 0 limit)
+           (setf limit (max 0 (- fl limit)))))
+       (let (seq (make-array (aif limit (min it fl) fl)
+                        :element-type 'character
+                        :fill-pointer t))
+            (awhen offset
+              (file-position s offset))
+            (setf (fill-pointer seq) (read-sequence seq s))
+            seq)))
     (with-stream (s path-or-stream :binary binary)
        (let ((buf (if binary
                         (make-array 4096 :element-type '(unsigned-byte 8))
@@ -375,25 +391,25 @@
                         (make-string 0))))
             (loop for index = 0 then (+ index pos)
                   for pos = (read-sequence buf s)
-                  with remoffset = offset
+                  with posoffset = (max 0 offset)
+                  with remoffset = posoffset
                   while (and (plusp pos)
                              (or (not limit)
-                                 (< pos (+ limit 4096))))
-                  do (when (and (> (+ index pos) offset))
+                                 (and (plusp limit) (< pos (+ limit 4096)))))
+                  do (when (and (> (+ index pos) posoffset))
                         (if binary
-                          (adjust-array seq (or limit (- (+ index pos) offset)))
+                          (adjust-array seq (or limit (- (+ index pos) posoffset)))
                           (setf seq (concatenate 'string seq (make-string pos))))
                         (replace seq buf
                             :start1 index
                             :start2 remoffset)
                         (decf remoffset pos)))
              (when (and binary (equal seq "")) (setf seq #()))
-             (aif limit {seq 0 (min it (length seq))} seq)))
-    (with-open-file (s path-or-stream)
-       (let ((seq (make-array (aif limit (min it (file-length s)) (file-length s)) :element-type 'character :fill-pointer t)))
-            (awhen offset (read-sequence (make-array it) s))
-            (setf (fill-pointer seq) (read-sequence seq s))
-            seq))))
+             (when (< 0 offset)
+               (setf seq (if (< (length seq) offset) "" {seq offset -1})))
+             (when (and limit (< 0 limit)
+               (setf limit (max 0 (- (length seq) limit)))))
+             (aif limit {seq 0 (min (plusp it (length seq)))} seq)))))
 
 (defun unglob (filename object &key if-exists binary readable)
   (progn
@@ -409,22 +425,72 @@
         (prin1 object stream)))
     t))
 
+(defun count-lines (file)
+  (let ((total 0))
+    (with-open-file (file-stream file)
+      (do ((it (read-line file-stream) (read-line file-stream nil 'eof)))
+          ((eq it 'eof) (values))
+          (incf total)))
+    total))
+
+(defun back-n-lines (file-stream n)
+  (let ((buf (make-string 4096))
+        (lines 0))
+      (loop until (or (>= lines n) (< (length buf) 4096))
+            do (file-position file-stream (max 0 (- (file-position file-stream) 4096)))
+               (awith (read-sequence buf file-stream)
+                  (file-position file-stream (- (file-position file-stream) it)))
+               (incf lines (count #\Newline buf)))
+      (print (str "LINES : " lines))
+      (if (> lines n)
+        (file-position file-stream (+ (file-position file-stream)
+                                        (length (~ (str "/^" (x "[^\\n]*\\n" (- lines n)) "/")
+                                                   buf 0)))))))
+
 (defmacro with-each-fline (args &rest body)
   (destructuring-bind (path-or-stream &key (offset 0) limit) args
-    `(with-stream (s ,path-or-stream)
-      (block read-loop
-        (let ((skipped-lines 0)
-              (done-lines 0))
-          (do ((it (read-line s) (read-line s nil 'eof)))
-              ((eq it 'eof) (values))
-              (if (>= skipped-lines ,offset)
-                (progn
-                  (when (and ,limit (>= done-lines ,limit))
-                    (return-from read-loop done-lines))
-                  (incf done-lines)
-                  ,@body)
-                (incf skipped-lines)))
-          done-lines)))))
+    `(block read-loop
+        (let ((offset ,offset)
+              (limit ,limit))
+          (when (< limit 0)
+            (error "Limit must be a positive integer (number of lines)"))
+          (when (and limit
+                     (< limit 0)
+                     (looks-like-file ,path-or-stream))
+            ;we need to know the total number of lines
+            (let ((total (count-lines ,path-or-stream)))
+              (when (< offset 0)
+                (setf offset (max (+ total offset) 0)))
+              (when (< limit 0) 
+                (setf limit (max (+ total limit) 0)))))
+            (when (and (not (looks-like-file ,path-or-stream))
+                       (or (< offset 0)
+                           (and limit (< limit 0))))
+              ; we have to read the whole thing
+              (let ((done-lines 0))
+                (loop for it in {(resplit "/\\n/" (glob ,path-or-stream)) offset limit}
+                      do ,@body
+                         (incf done-lines))
+                (return-from read-loop done-lines)))
+          (with-stream (s ,path-or-stream)
+            (when (and (looks-like-file ,path-or-stream)
+                       (< offset 0))
+                ; we can read it backwards to set the file-position then set offset to 0
+                (file-position s (file-length s))
+                (back-n-lines s (- offset))
+                (setf offset 0))
+              (let ((skipped-lines 0)
+                    (done-lines 0))
+                (do ((it (read-line s) (read-line s nil 'eof)))
+                    ((eq it 'eof) (values))
+                    (if (>= skipped-lines offset)
+                      (progn
+                        (when (and limit (>= done-lines limit))
+                          (return-from read-loop done-lines))
+                        (incf done-lines)
+                        ,@body)
+                      (incf skipped-lines)))
+                done-lines))))))
 
 (defmacro with-each-line (args &rest body)
   (destructuring-bind (str &key (offset 0) limit) args
@@ -484,6 +550,17 @@
     #+abcl    (with-output-to-string (s) (ext:run-shell-command command :output s))
     #-(or allegro clisp cmu sbcl ccl abcl)
               (error 'not-implemented :proc (list 'pipe-input prog args)))
+
+;(defun sh (command)
+;  (with-input-from-sh (s command)
+;    (glob s)))
+
+;(defmacro with-input-from-sh (args &rest body)
+;  (destructuring-bind (stdout command &key stderr stdin) args
+;    `#+sbcl (sb-ext:run-program "/bin/sh" (list command) :input stdin :output stdout :error (aif stderr it stdout))
+;    `#+abcl (ext:run-shell-command command :output stdout)
+;    @body
+;    ))
 
 ; for backwards compatibility
 (defun system (command)
