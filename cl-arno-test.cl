@@ -6,19 +6,37 @@
 
 (in-package :cl-arno-test)
 
-(defun test (description output expected &key (test #'equal))
-  (princ description)
-  (if (funcall test output expected)
+(defun test (description output &key expect (test #'equal) fatal (level 0))
+  (declare (ignore fatal))
+  (format t (str (x "  " (+ level 1)) description))
+  (if (handler-case (funcall test output expect) (condition (c) c)) ;TODO: ne marche pas, on entre dans le debugger au lieu de retourner la condition comme valeur
       (progn (format t " -> ok~%") t)
-      (progn (format t " -> FAILED !~% ### OUTPUT ###~%") (describe output) (format t "### EXPECTED ###~%") (describe expected) nil)))
+      (progn (format t " -> FAILED !~% ### OUTPUT ###~%") (describe output) (format t "### EXPECTED ###~%") (describe expect) nil)))
 
-(defmacro test-suite (name &rest body)
-  `(progn
-      (format t "*** ~A ***~%" ,name)
-      (block test-suite1
-             (loop for test in (quote ,body) do (unless (eval test) (progn (format t "aborting test suite~%~%") (return-from test-suite1))))
-             (format t "~%")
-             t)))
+(defmacro test-suite (args &rest body)
+  (destructuring-bind (name &key (level 0) setup teardown) args
+    `(progn
+      (let ((total 0)
+            (passed 0)
+            (skipped 0))
+          (declare (ignore skipped))
+          (format t (str (x "  " ,level) "### Test suite '" ,name "'~%"))
+          ,setup
+          (loop for form in (quote ,body)
+                do (cond ((eq (car form) 'test)
+                             (incf total)
+                             ;(push ,level (caddr form))
+                             ;(push :level (caddr form))
+                             (when (eval form) ; TODO: gerer le fatal : skip le reste
+                                (incf passed)))
+                         ((eq (car form) 'test-suite)
+                             ;(push (+ ,level 1) (caddr form))
+                             ;(push :level (caddr form))
+                             (eval form))
+                         (t (eval form))))
+          ,teardown
+          (format t (str (x "  " ,level) "### " passed "/" total " passed in '" ,name "'~%"))
+          ))))
 
 (defmacro with-mocks (mocks &rest body)
   (let* ((functions (remove-duplicates (mapcar [if (listp (car _)) (caar _) (car _)] mocks)))
