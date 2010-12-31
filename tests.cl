@@ -475,4 +475,34 @@
 
       (test "sha256"
         (sha256 "couscous")
-        :expect "438292433b9c125743d88dc39afa226f0a5226cac25d6e08bfe29b419374a1a3")))
+        :expect "438292433b9c125743d88dc39afa226f0a5226cac25d6e08bfe29b419374a1a3"))
+
+  (test-suite ("xor")
+      (test "xor nil nil nil"
+        (xor nil nil nil)
+        :expect nil)
+
+      (test "xor t nil nil"
+        (xor t nil nil)
+        :expect t)
+
+      (test "xor nil t nil"
+        (xor nil t nil)
+        :expect t)
+
+      (test "xor t t nil"
+        (xor t t nil)
+        :expect nil)
+
+      (test "xor t t"
+        (xor t t)
+        :expect nil)
+
+      (test "xor 1 nil"
+        (xor 1 nil)
+        :expect 1)
+
+      (test "xor nil (+ 1 3)"
+        (xor nil (+ 1 3))
+        :expect 4)
+  ))

@@ -6,12 +6,17 @@
 
 (in-package :cl-arno-test)
 
-(defun test (description output &key expect (test #'equal) fatal (level 0))
-  (declare (ignore fatal))
-  (format t (str (x "  " (+ level 1)) description))
-  (if (handler-case (funcall test output expect) (condition (c) c)) ;TODO: ne marche pas, on entre dans le debugger au lieu de retourner la condition comme valeur
-      (progn (format t " -> ok~%") t)
-      (progn (format t " -> FAILED !~% ### OUTPUT ###~%") (describe output) (format t "### EXPECTED ###~%") (describe expect) nil)))
+(defmacro test (description form &key expect expect-error (test #'equal) fatal (level 0))
+  `(progn
+     (format t (str (x "  " (+ ,level 1)) ,description))
+     (multiple-value-bind (ret err) (ignore-errors ,form)
+       (when (typep err 'error)
+         (setf ret err))
+       (if (and (funcall ,test (if (typep err 'error) err ret)
+                               (aif ,expect-error it ,expect))
+                (not (xor ,expect-error (typep err 'error))))
+          (progn (format t " -> ok~%") t)
+          (progn (format t " -> FAILED !~% ### OUTPUT ###~%") (describe ret) (format t "### EXPECTED ###~%") (describe ,expect) nil)))))
 
 (defmacro test-suite (args &rest body)
   (destructuring-bind (name &key (level 0) setup teardown) args
