@@ -4,6 +4,16 @@
 (in-package :cl-arno-tests)
 
 (test-suite ("cl-arno")
+  (test-suite ("join / split")
+
+    (test "split"
+      (split " " "1 2 3")
+      :expect (list "1" "2" "3"))
+
+    (test "join"
+      (join " " (list "1" "2" (list "3" "4")))
+      :expect "1 2 3 4"))
+
   (test-suite ("conversions"
                :setup (progn (defstruct test-struct
                                (slot1 nil :type string)
@@ -258,12 +268,20 @@
            (ut (date))
            :expect (get-universal-time))
      
-         (test "ut (date \"now\")"
-           (ut (date "now"))
+         (test "ut (date :str \"now\")"
+           (ut (date :str "now"))
            :expect  (get-universal-time))
      
+         (test "date-week (date January 22 1964 23:12)"
+           (date-week (date :str "January 22 1964 23:12"))
+           :expect 4)
+     
+         (test "date-wom (date January 22 1964 23:12)"
+           (date-wom (date :str "January 22 1964 23:12"))
+           :expect 4)
+     
          (test "ut (date January 22 1964 23:12)"
-           (ut (date "January 22 1964 23:12"))
+           (ut (date :str "January 22 1964 23:12"))
            :expect (encode-universal-time 0 12 23 22  1 1964 -1)))
 
   (test-suite ("Glob / unglob"

@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:date #:d- #:d+ #:d-delta #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:fselect1 #:mkdir #:md5 #:sha1 #:sha256 #:memoize #:memoize-to-disk #:with-each-line #:ut #:miltime #:y-m-d #:mapflines #:xor)
+    (:export  #:date #:d- #:d+ #:d-delta #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:fselect1 #:mkdir #:md5 #:sha1 #:sha256 #:memoize #:memoize-to-disk #:with-each-line #:ut #:miltime #:y-m-d #:mapflines #:xor #:date-wom #:date-week)
     #-abcl (:export #:getenv))
 
 (in-package :cl-arno)
@@ -10,6 +10,11 @@
 #-abcl (asdf:operate 'asdf:load-op 'drakma)
 #+sbcl (require 'sb-posix)
 #+sbcl (require 'closer-mop)
+
+(defvar +months-abbr+ (list "" "Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec"))
+(defvar +months+ (list "" "January" "February" "March" "April" "May" "June" "July" "August" "September" "October" "November" "December"))
+(defvar +days-abbr+ (list "Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))
+(defvar +days+ (list "Monday" "Tuesday" "Wednesday" "Thursday" "Friday" "Saturday" "Sunday"))
 
 ; mkstr by P.G. (On Lisp)
 (defun mkstr (&rest args)
@@ -173,7 +178,6 @@
         ((null (cdr args)) (car args))
         (t `(aif ,(car args) (aand ,@(cdr args))))))
  
-
 (defmacro aunless (test-form &rest then-forms)
   "Executes <body> with <it> bound to <expr> if <expr> is nil"
   `(let ((it ,test-form))
@@ -187,6 +191,13 @@
 (defmacro awith (expr &body body)
   "Executes <body> with <it> bound to <expr>"
 	`(let ((it ,expr)) ,@body))
+
+(defmacro acond (&rest forms)
+  (let ((blockname (gensym)))
+    `(block ,blockname
+      ,@(loop for form in forms
+          collect `(awhen ,(car form) (return-from ,blockname ,(cadr form))))
+      nil)))
 
 (defun lc (object)
   "Converts an object to a lowercase string"
@@ -301,10 +312,11 @@
             collecting {seq start (or end (length seq))}
             while end)))
 
-(defun join (join-seq seq-list)
-  (if (cdr seq-list)
-      (concatenate (class-of join-seq) (car seq-list) join-seq (join join-seq (cdr seq-list)))
-      (car seq-list)))
+(defun join (join-seq &rest seq-lists)
+  (awith (flatten seq-lists)
+    (if (cdr it)
+        (concatenate (class-of join-seq) (car it) join-seq (join join-seq (cdr it)))
+        (car it))))
 
 ;*** x a la perl/python/ruby ***
 (defun x (seq nb)
@@ -810,40 +822,53 @@
   dow day month year
   dst zone)
 
+(defun date-rfc-2822 (date)
+  (format nil "~A, ~2,'0D ~A ~4,'0D ~2,'0D:~2,'0D:~2,'0D ~A"
+       {(list "Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun") (date-dow date)}
+       (date-day date)
+       {(list "" "Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec") (date-month date)}
+       (date-year date)
+       (date-h date)
+       (date-m date)
+       (date-s date)
+       (~s "/^(-|)(\\d{3})$/\\{1}0\\2/" (str (* 100 (date-zone date))))))
+
+(defun date-gnu (date format)
+  (sh (str "date -d '" (date-rfc-2822 date) "' +'" format "'")))
+
 (defun strtout (str)
   (let ((result (sh (str "date -d \"" str "\" +%s"))))
     (if (!~ "/^(-|)\\d+\\n$/" result)
-        (error result)
-        (+ (read-from-string result) 2208988800))))
+      (error "Invalid date string : ~A" str)
+      (+ (read-from-string result) 2208988800))))
 
-(defun date (&optional timestamp-or-string zone)
-  (multiple-value-bind (s m h day month year dow daylight-p zone)
+(defun date (&key ut miltime str zone)
+  (multiple-value-bind (us um uh uday umonth uyear udow udaylight-p uzone)
                        (decode-universal-time 
-                          (aif timestamp-or-string
-                            (cond
-                              ((stringp it) (strtout it))
-                              ((and (numberp it) (< it 2400))
-                                   (strtout (str {it 0 2} ":" {it 2 4})))
-                              (t it))
+                          (if (or ut str miltime)
+                            (acond
+                              (str (strtout it))
+                              (miltime (strtout (str {it 0 2} ":" {it 2 4})))
+                              (ut ut))
                             (get-universal-time))
                           zone)
   (make-date
-	  :s s
-	  :m m
-	  :h h
-	  :day day
-	  :month month
-	  :year year
-	  :dow dow
-	  :dst daylight-p
-	  :zone zone
+	  :s      us
+	  :m      um
+	  :h      uh
+	  :day    uday
+	  :month  umonth
+	  :year   uyear
+	  :dow    udow
+	  :dst    udaylight-p
+	  :zone   (or zone uzone)
   )))
 
 (defun ut (&optional str-or-date)
   (declare (optimize debug))
   (if str-or-date
     (if (stringp str-or-date)
-      (ut (date str-or-date))
+      (strtout str-or-date)
       (encode-universal-time
          (date-s str-or-date)
          (date-m str-or-date)
@@ -858,36 +883,73 @@
 (defun d-delta (date1 date2)
   (- (ut date1) (ut date2)))
 
-(defun d+ (date seconds)
-  (date (+ (ut date) seconds) (date-zone date)))
+(defun decode-duration (duration)
+  "Transforms a duration string : '1m 1d'... into a number of seconds"
+  (if (numberp duration)
+      duration
+      (apply #'+ (mapcar (lambda (dur)
+                            (if (~ "/^\d+$/" dur) 
+                                dur
+                                (* (cond 
+                                      ((~ "/s$/i" dur) 1)
+                                      ((~ "/m$/ " dur) 60)
+                                      ((~ "/h$/i" dur) 3600)
+                                      ((~ "/d$/i" dur) (* 24 3600))
+                                      ((~ "/w$/i" dur) (* 7 24 3600))
+                                      ((~ "/M$/ " dur) (* 30 24 3600))
+                                      ((~ "/y$/i" dur) (* 12 30 24 3600))
+                                      (t (error "Can't decode duration")))
+                                   (parse-integer {dur 0 -2}))))
+                         (split " " duration)))))
 
-(defun d- (date seconds)
-  (d+ date (- seconds)))
+(defun encode-duration (duration)
+  (~s "/\\s+$//"
+     (let* ((du duration)
+         (y  (floor du (* 12 30 24 3600)))
+         (du (if (plusp du) (rem du (* 12 30 24 3600)) 0))
+         (mo (floor du (* 30 24 3600)))
+         (du (if (plusp du) (rem du (* 30 24 3600)) 0))
+         (w  (floor du (* 7 24 3600)))
+         (du (if (plusp du) (rem du (* 7 24 3600)) 0))
+         (d  (floor du (* 24 3600)))
+         (du (if (plusp du) (rem du (* 24 3600)) 0))
+         (h  (floor du 3600))
+         (du (if (plusp du) (rem du 3600) 0))
+         (m  (floor du 60))
+         (s  (if (plusp du) (rem du 60) 0)))
+        (str (if (plusp y)  (str y  "Y "))
+             (if (plusp mo) (str mo "M "))
+             (if (plusp w)  (str w  "w "))
+             (if (plusp d)  (str d  "d "))
+             (if (plusp h)  (str h  "h "))
+             (if (plusp m)  (str m  "m "))
+             (if (plusp s)  (str s  "s"))))))
 
-(defun miltime (&optional (date (date (ut))))
-  (+ (* 100 (date-h date))
-     (date-m date)
-     (/ 100 (date-s date))))
+(defun d+ (date duration)
+  (date :ut (+ (ut date) (if (numberp duration) duration (decode-duration duration)))
+        :zone (date-zone date)))
+
+(defun d- (date duration)
+  (d+ date (- (if (numberp duration) duration (decode-duration duration)))))
+
+(defun date-week (date)
+  "ISO week number, with Monday as first day of week (1..53)"
+  (read-from-string (sh (str "date -d '" (date-rfc-2822 date) "' +%V"))))
+
+(defun date-wom (date)
+  "Week of month (1..5)"
+  (- (date-week date) (date-week (d- date (str (- (date-day date) 1) "d"))) -1))
+
+(defun miltime (&optional (d (date)))
+  (+ (* 100 (date-h d))
+     (date-m d)
+     (/ 100 (date-s d))))
   
 (defun to-zone (date zone)
-  (date (ut date) zone))
+  (date :ut (ut date) :zone zone))
 
 (defun y-m-d (date)
   (str (date-year date) "-" (date-month date) "-" (date-day date)))
-
-(defun date-rfc-2822 (date)
-  (format t "~A, ~2,'0D ~A ~4,'0D ~2,'0D:~2,'0D:~2,'0D ~A"
-       {(list "Mon" "Tue" "Wen" "Thu" "Fri" "Sat" "Sun") (date-dow date)}
-       (date-day date)
-       {(list "" "Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec") (date-month date)}
-       (date-year date)
-       (date-h date)
-       (date-m date)
-       (date-s date)
-       (~s "/^(-|)(\\d{3})$/\\{1}0\\2/" (str (* 100 (date-zone date))))))
-
-(defun date-gnu (date format)
-  (sh (str "date -d '" (date-rfc-2822 date) "' +'" format "'")))
 
 (defmacro xor (&rest args)
   "Exclusive OR : returns nil if nothing or more than one element in args is true, returns the only true element overwise"
@@ -899,3 +961,6 @@
                (return-from xor nil)
                (setf result a))))
     result)))
+
+(defun pe ()
+  (eval (read-from-string (sh "xcopy -o"))))
