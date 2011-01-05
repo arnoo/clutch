@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:date #:d- #:d+ #:d-delta #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:fselect1 #:mkdir #:md5 #:sha1 #:sha256 #:memoize #:memoize-to-disk #:with-each-line #:ut #:miltime #:y-m-d #:mapflines #:xor #:date-wom #:date-week)
+    (:export  #:date #:d- #:d+ #:d-delta #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:fselect1 #:mkdir #:md5 #:sha1 #:sha256 #:memoize #:memoize-to-disk #:with-each-line #:ut #:miltime #:y-m-d #:mapflines #:xor #:date-wom #:date-week #:d= #:d/= #:d> #:d<)
     #-abcl (:export #:getenv))
 
 (in-package :cl-arno)
@@ -146,7 +146,7 @@
 (defun pick (object &rest places)
   (mapcar [access object _] places))
 
-;function composition from on-lisp (compose)
+;function composition from on-lisp (originally "compose")
 (defun o (&rest fns)
   "compose functions"
   (if fns
@@ -823,6 +823,7 @@
   dst zone)
 
 (defun date-rfc-2822 (date)
+  "Returns a date in the RFC-2822 format : Mon, 07 Aug 2006 12:34:56 -0600"
   (format nil "~A, ~2,'0D ~A ~4,'0D ~2,'0D:~2,'0D:~2,'0D ~A"
        {(list "Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun") (date-dow date)}
        (date-day date)
@@ -837,6 +838,7 @@
   (sh (str "date -d '" (date-rfc-2822 date) "' +'" format "'")))
 
 (defun strtout (str)
+  "Converts a string to a CL universal time"
   (let ((result (sh (str "date -d \"" str "\" +%s"))))
     (if (!~ "/^(-|)\\d+\\n$/" result)
       (error "Invalid date string : ~A" str)
@@ -884,7 +886,8 @@
   (- (ut date1) (ut date2)))
 
 (defun decode-duration (duration)
-  "Transforms a duration string : '1m 1d'... into a number of seconds"
+  "Transforms a duration string : '1m 1d'... into a number of seconds
+   Warning : approximative for months and years"
   (if (numberp duration)
       duration
       (apply #'+ (mapcar (lambda (dur)
@@ -903,6 +906,8 @@
                          (split " " duration)))))
 
 (defun encode-duration (duration)
+  "Transforms a number of seconds into a duration string : '1m 1d'...
+   Warning : approximative for months and years"
   (~s "/\\s+$//"
      (let* ((du duration)
          (y  (floor du (* 12 30 24 3600)))
@@ -926,11 +931,28 @@
              (if (plusp s)  (str s  "s"))))))
 
 (defun d+ (date duration)
+  "Adds a number of seconds or a a duration string : '1m 1d'... to a date
+   Warning : approximative for adding months and years"
   (date :ut (+ (ut date) (if (numberp duration) duration (decode-duration duration)))
         :zone (date-zone date)))
 
 (defun d- (date duration)
+  "Removes a number of seconds or a a duration string : '1m 1d'... from a date
+   Warning : approximative for adding months and years"
   (d+ date (- (if (numberp duration) duration (decode-duration duration)))))
+
+; TODO: macros pour ne pas evaluer si inutile ? (en CL, les = > < sont des fonctions...)
+(defun d> (&rest dates)
+  (> (mapcar #'ut dates)))
+
+(defun d< (&rest dates)
+  (< (mapcar #'ut dates)))
+
+(defun d= (&rest dates)
+  (< (mapcar #'ut dates)))
+
+(defun d/= (&rest dates)
+  (/= (mapcar #'ut dates)))
 
 (defun date-week (date)
   "ISO week number, with Monday as first day of week (1..53)"
@@ -941,18 +963,21 @@
   (- (date-week date) (date-week (d- date (str (- (date-day date) 1) "d"))) -1))
 
 (defun miltime (&optional (d (date)))
+  "Returns a 'military' time format for date : 1243,22 for 12:43:22"
   (+ (* 100 (date-h d))
      (date-m d)
      (/ 100 (date-s d))))
   
 (defun to-zone (date zone)
+  "Convert date to timezone zone"
   (date :ut (ut date) :zone zone))
 
 (defun y-m-d (date)
+  "Date in format 2003-12-22"
   (str (date-year date) "-" (date-month date) "-" (date-day date)))
 
 (defmacro xor (&rest args)
-  "Exclusive OR : returns nil if nothing or more than one element in args is true, returns the only true element overwise"
+  "Exclusive OR : returns nil if nothing or more than one element in args is true, returns the only true element overwise. If more than one element is found to be true, the rest is not evaluated."
   `(block xor
     (let ((result nil))
       (loop for a in (list ,@args)
