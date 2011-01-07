@@ -1,0 +1,8 @@
+#!/bin/bash
+HS_PATH=/usr/share/doc/hyperspec
+l=${1:0:1}
+PAGE=`grep -m 1 "$1" "$HS_PATH/Front/X_Alph_${l^^}.htm" \
+      | sed -e 's/^.*HREF=\"//' \
+      | sed -e 's/\#.*\".*$//'`
+echo $HS_PATH/Front/$PAGE
+links -dump $HS_PATH/Front/$PAGE | tail -n +12 | less

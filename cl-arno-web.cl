@@ -11,8 +11,7 @@
 (enable-arc-lambdas)
 
 (defvar *form-validators* (make-hash-table :test 'equal))
-(defvar *default-validators* (hash-table )
-   )
+(defvar *default-validators* (hash-table ))
 
 ;(defmacro template (file values)
 ;  `(let ((s (make-string-output-stream)))
