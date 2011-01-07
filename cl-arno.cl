@@ -533,10 +533,10 @@
   (not (apply #'f= args)))
 
 (defun rpad (string chars &key (with " "))
-  (str string (x with (max 0 (- chars (length string))))))
+  (str string (x (str with) (max 0 (- chars (length string))))))
 
 (defun lpad (string chars &key (with " "))
-  (str (x with (max 0 (- chars (length string)))) string))
+  (str (x (str with) (max 0 (- chars (length string)))) string))
     
 
 ; sh based on run-prog-collect-output from stumpwm (GPL)

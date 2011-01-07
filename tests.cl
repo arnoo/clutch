@@ -271,6 +271,10 @@
          (test "ut (date :str \"now\")"
            (ut (date :str "now"))
            :expect  (get-universal-time))
+
+         (test "ut (date :miltime 1245)"
+           (ut (date :miltime 1245))
+           :expect (ut (date :str "12:45")))
      
          (test "date-week (date January 22 1964 23:12)"
            (date-week (date :str "January 22 1964 23:12"))
@@ -325,6 +329,11 @@
            (d/= (date :str "January 24 1964 23:12")
                (date :str "January 24 1964 23:12"))
            :expect nil)
+     
+         (test "d-delta"
+           (d-delta (date :str "January 24 1964 23:12")
+                    (date :str "January 24 1964 22:12"))
+           :expect 3600)
          )
 
   (test-suite ("Glob / unglob"
