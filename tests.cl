@@ -282,7 +282,50 @@
      
          (test "ut (date January 22 1964 23:12)"
            (ut (date :str "January 22 1964 23:12"))
-           :expect (encode-universal-time 0 12 23 22  1 1964 -1)))
+           :expect (encode-universal-time 0 12 23 22  1 1964 -1))
+     
+         (test "d<"
+           (d< (date :str "January 22 1964 23:12")
+               (date :str "January 23 1964 23:12")
+               (date :str "January 24 1964 23:12"))
+           :expect t)
+     
+         (test "d< 2"
+           (d< (date :str "January 24 1964 23:12")
+               (date :str "January 22 1964 23:12"))
+           :expect nil)
+     
+         (test "d>"
+           (d> (date :str "January 22 1964 23:12")
+               (date :str "January 24 1964 23:12"))
+           :expect nil)
+     
+         (test "d> 2"
+           (d> (date :str "January 24 1964 23:12")
+               (date :str "January 23 1964 23:12")
+               (date :str "January 22 1964 23:12"))
+           :expect t)
+     
+         (test "d="
+           (d= (date :str "January 22 1964 23:12")
+               (date :str "January 24 1964 23:12"))
+           :expect nil)
+     
+         (test "d= 2"
+           (d= (date :str "January 24 1964 23:12")
+               (date :str "January 24 1964 23:12"))
+           :expect t)
+     
+         (test "d/="
+           (d/= (date :str "January 22 1964 23:12")
+               (date :str "January 24 1964 23:12"))
+           :expect t)
+     
+         (test "d/= 2"
+           (d/= (date :str "January 24 1964 23:12")
+               (date :str "January 24 1964 23:12"))
+           :expect nil)
+         )
 
   (test-suite ("Glob / unglob"
                 :setup (when (probe-file "/tmp/tarno")

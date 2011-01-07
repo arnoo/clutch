@@ -943,16 +943,16 @@
 
 ; TODO: macros pour ne pas evaluer si inutile ? (en CL, les = > < sont des fonctions...)
 (defun d> (&rest dates)
-  (> (mapcar #'ut dates)))
+  (apply #'> (mapcar #'ut dates)))
 
 (defun d< (&rest dates)
-  (< (mapcar #'ut dates)))
+  (apply #'< (mapcar #'ut dates)))
 
 (defun d= (&rest dates)
-  (< (mapcar #'ut dates)))
+  (apply #'= (mapcar #'ut dates)))
 
 (defun d/= (&rest dates)
-  (/= (mapcar #'ut dates)))
+  (apply #'/= (mapcar #'ut dates)))
 
 (defun date-week (date)
   "ISO week number, with Monday as first day of week (1..53)"
