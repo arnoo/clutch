@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:date #:d- #:d+ #:d-delta #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:fselect1 #:mkdir #:md5 #:sha1 #:sha256 #:memoize #:memoize-to-disk #:with-each-line #:ut #:miltime #:y-m-d #:mapflines #:xor #:date-wom #:date-week #:d= #:d/= #:d> #:d<)
+    (:export  #:date #:d- #:d+ #:d-delta #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:fselect1 #:mkdir #:md5 #:sha1 #:sha256 #:memoize #:memoize-to-disk #:with-each-line #:ut #:miltime #:y-m-d #:mapflines #:xor #:date-wom #:date-week #:d= #:d/= #:d> #:d< #:lpad #:rpad)
     #-abcl (:export #:getenv))
 
 (in-package :cl-arno)
@@ -533,12 +533,11 @@
   (not (apply #'f= args)))
 
 (defun rpad (string chars &key (with " "))
-  ;TODO : utiliser with
-  (format nil (str "~" chars "<~A~;~>") string))
+  (str string (x with (max 0 (- chars (length string))))))
 
 (defun lpad (string chars &key (with " "))
-  ;TODO : utiliser with
-  (format nil (str "~" chars "<~A~;~>") string))
+  (str (x with (max 0 (- chars (length string)))) string))
+    
 
 ; sh based on run-prog-collect-output from stumpwm (GPL)
 (defun sh (command)
@@ -850,7 +849,8 @@
                           (if (or ut str miltime)
                             (acond
                               (str (strtout it))
-                              (miltime (strtout (str {it 0 2} ":" {it 2 4})))
+                              (miltime (let ((milstr (lpad (str it) 4 :with 0)))
+                                          (strtout (str {milstr 0 2} ":" {milstr 2 4}))))
                               (ut ut))
                             (get-universal-time))
                           zone)
