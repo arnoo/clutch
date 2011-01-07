@@ -144,7 +144,7 @@
   (set-macro-character #\! #'compose-reader))
 
 (defun pick (object &rest places)
-  (mapcar [access object _] places))
+  (mapcar [_ object] places))
 
 ;function composition from on-lisp (originally "compose")
 (defun o (&rest fns)
@@ -670,7 +670,7 @@
         (t nil)))
 
 (defun kvalues (o)
-  (mapcar [access o _] (keys o)))
+  (mapcar [_ o] (keys o)))
 
 #-abcl
 (defun slot-type (class slot)
