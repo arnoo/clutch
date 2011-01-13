@@ -348,7 +348,7 @@
                  {it 3}
                  (setf a 1)
                  {it 3}))
-            :expect 4)
+            :expect 3)
 
     )
 

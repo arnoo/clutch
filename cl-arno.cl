@@ -600,7 +600,9 @@
   (with-open-file (s filepath) (file-length s)))
 
 (defun rm (file)
-  (delete-file file))
+  (if (probe-file file)
+    (delete-file file)
+    nil))
 
 (defun ls (path &key recurse files-only dirs-only)
  #+(or :sbcl :cmu :scl :lispworks :abcl)
@@ -722,8 +724,8 @@
                                                                        5 4 3 2 1 0))))))))
           (unglob file object :readable t :if-exists :supersede)))
       (unless timestamped
-        (rm lock))
-      id)))
+        (rm lock)))
+      id))
 
 (defun fload (dir id &key version)
   (unless version
@@ -765,60 +767,6 @@
 
 (defun md5 (obj)
   (ironclad-digest obj :md5))
-
-(defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last expire)
-  (unless prefix
-    (setf prefix (str "cl-arno-mem-" (~ "/\{([A-E0-9]+)\}/" (str fn) 1)))
-    (setf force-reset t))
-  (when force-reset (sh (str "rm -f " dir "/" prefix "#*" )))
-  #'(lambda (&rest args) 
-    (let ((time (ut))
-          (file (str dir "/"
-                     prefix
-                     "#" (sha256 (str args)))))
-       (loop while (ls (str "." file ".lock")) do (sleep 0.01))
-       (when expire
-         (loop for f in (~ (str "/\\/" prefix "#[^\\/]+/") (ls dir))
-           do (when (> (- time (file-write-date f)) expire)
-                (rm f))))
-       (if (ls file)
-           (read-from-string (glob file))
-           (awith (apply fn args)
-              (unglob (str "." file ".lock") "")
-              (unwind-protect
-                (progn
-                  (when remember-last
-                    (awith (~ (str "/\\/" prefix "#[^\\/]+/") (ls dir))
-                      (when (>= (length it) remember-last)
-                         (rm (first (sort it [> (file-write-date _) (file-write-date __)]))))))
-                  (unglob file it :readable t))
-              (rm (str "." file ".lock")))
-              it)))))
-
-; Memoize adapted from OnLisp
-(defun memoize (fn &key remember-last expire)
-  (let ((cache (mkhash))
-        (calls (mkhash)))
-     #'(lambda (&rest args)
-          (when expire
-                (loop for time = (ut)
-                      for call in (keys calls)
-                      do (when (> (- time {calls call}) expire)
-                            (remhash call cache)
-                            (remhash call calls))))
-          (when (or remember-last expire)
-            (setf {calls args} (ut)))
-          (multiple-value-bind (val hit) (gethash args cache)
-            (if hit
-                val
-                (progn
-                  (when (and remember-last
-                             (>= (hash-table-count cache) remember-last))
-                     (awith (first (sort (keys calls) [> {calls _} {calls __}]))
-                       (remhash it calls)
-                       (remhash it cache)))
-                  (setf {cache args}
-                        (apply fn args))))))))
 
 (defstruct-and-export date
   s m h
@@ -1006,3 +954,58 @@
                       do (setf form (read f nil 'EOF))
                          (unless (eq form 'EOF) (eval form)))
                 (setf offset (file-position f))))))
+
+(defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last expire)
+  (unless prefix
+    (setf prefix (str "cl-arno-mem-" (~ "/\{([A-E0-9]+)\}/" (str fn) 1)))
+    (setf force-reset t))
+  (when force-reset (sh (str "rm -f " dir "/" prefix "#*" )))
+  #'(lambda (&rest args) 
+    (let* ((time (ut))
+           (file (str dir "/"
+                      prefix
+                      "#" (sha256 (str args))))
+           (lock (str file ".lock")))
+       (loop while (ls lock) do (sleep 0.01))
+       (when expire
+         (loop for f in (~ (str "/\\/" prefix "#[^\\/]+/") (ls dir))
+           do (when (> (- time (file-write-date f)) expire)
+                (rm f))))
+       (if (ls file)
+           (read-from-string (glob file))
+           (awith (apply fn args)
+              (unglob lock "")
+              (unwind-protect
+                (progn
+                  (when remember-last
+                    (awith (~ (str "/\\/" prefix "#[^\\/]+/") (ls dir))
+                      (when (>= (length it) remember-last)
+                         (rm (first (sort it [> (file-write-date _) (file-write-date __)]))))))
+                  (unglob file it :readable t))
+                (rm lock))
+              it)))))
+
+; Memoize adapted from OnLisp
+(defun memoize (fn &key remember-last expire)
+  (let ((cache (mkhash))
+        (calls (mkhash)))
+     #'(lambda (&rest args)
+          (when expire
+                (loop for time = (ut)
+                      for call in (keys calls)
+                      do (when (> (- time {calls call}) expire)
+                            (remhash call cache)
+                            (remhash call calls))))
+          (when (or remember-last expire)
+            (setf {calls args} (ut)))
+          (multiple-value-bind (val hit) (gethash args cache)
+            (if hit
+                val
+                (progn
+                  (when (and remember-last
+                             (>= (hash-table-count cache) remember-last))
+                     (awith (first (sort (keys calls) [> {calls _} {calls __}]))
+                       (remhash it calls)
+                       (remhash it cache)))
+                  (setf {cache args}
+                        (apply fn args))))))))
