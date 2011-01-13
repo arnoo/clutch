@@ -11,6 +11,7 @@
 #+sbcl (require 'sb-posix)
 #+sbcl (require 'closer-mop)
 
+(defvar +shell+ "/bin/bash")
 (defvar +months-abbr+ (list "" "Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec"))
 (defvar +months+ (list "" "January" "February" "March" "April" "May" "June" "July" "August" "September" "October" "November" "December"))
 (defvar +days-abbr+ (list "Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))
@@ -543,33 +544,16 @@
 (defun sh (command)
   "run a command and read its output."
   (with-input-from-string (ar command)
-    #+allegro (with-output-to-string (s) (excl:run-shell-command "/bin/sh" :output s :wait t :input ar))
+    #+allegro (with-output-to-string (s) (excl:run-shell-command +shell+ :output s :wait t :input ar))
     #+clisp   (with-output-to-string (s)
                 (let ((out (ext:run-program "/bin/sh" :arguments () :input ar :wait t :output :stream)))
-                  (loop for i = (read-char out nil out)
-                        until (eq i out)
-                        do (write-char i s))))
-    #+cmu     (with-output-to-string (s) (ext:run-program "/bin/sh" () :input ar :output s :error s :wait t))
-    #+sbcl    (with-output-to-string (s) (sb-ext:run-program "/bin/sh" () :input ar :output s :error s :wait t)))
-    #+ccl     (with-output-to-string (s) (ccl:run-program "/bin/sh" () :wait t :output s :error t :input ar))
-    #+abcl    (with-output-to-string (s) (ext:run-shell-command command :output s))
+                  (glob out)))
+    #+cmu     (with-output-to-string (s) (ext:run-program +shell+ () :input ar :output s :error s :wait t))
+    #+sbcl    (with-output-to-string (s) (sb-ext:run-program +shell+ () :input ar :output s :error s :wait t)))
+    #+ccl     (with-output-to-string (s) (ccl:run-program +shell+ () :wait t :output s :error t :input ar))
+    #+abcl    (with-output-to-string (s) (ext:run-shell-command (str +shell+ " " command) :output s))
     #-(or allegro clisp cmu sbcl ccl abcl)
               (error 'not-implemented :proc (list 'pipe-input prog args)))
-
-;(defun sh (command)
-;  (with-input-from-sh (s command)
-;    (glob s)))
-
-;(defmacro with-input-from-sh (args &rest body)
-;  (destructuring-bind (stdout command &key stderr stdin) args
-;    `#+sbcl (sb-ext:run-program "/bin/sh" (list command) :input stdin :output stdout :error (aif stderr it stdout))
-;    `#+abcl (ext:run-shell-command command :output stdout)
-;    @body
-;    ))
-
-; for backwards compatibility
-(defun system (command)
-  (sh command))
 
 ; get-env from stumpwm (also found in the CL cookbook) (GPL or better)
 #-abcl ;abcl has it predefined !
@@ -718,26 +702,28 @@
     (unless timestamped
       (loop while (ls lock) do (sleep 0.1))
       (unglob lock ""))
-    (unless id (setf id (aif (and id-slot {object id-slot})
-                             it
-                             (let ((items (~ "/^.*\\/(.*)(###|$)/" (!~ "/\\/\\.[^\\/]*$/" (ls dir)) 1)))
-                                (if items
-                                    (if (= (length (~ "/^\\d+$/" items)) (length items))
-                                        (+ 1 (apply #'max (mapcar #'read-from-string items)))
-                                        (let ((i (str (gensym)))) ; FIXME: this is very stupid (don't use as is)
-                                             (loop while (ls i) do (setf i (str (gensym))))
-                                             i))
-                                    0)))))
-    (when id-slot (setf {object id-slot} id))
-    (let ((file (str dir "/" id (if timestamped
-                                  (str "###" (apply #'format
-                                                    (append '(nil "~4,'0D~2,'0D~2,'0D~2,'0D~2,'0D~2,'0D")
-                                                             (pick (multiple-value-list (get-decoded-time))
-                                                                   5 4 3 2 1 0))))))))
-      (unglob file object :readable t :if-exists :supersede))
-    (unless timestamped
-      (rm lock))
-      id))
+    (unwind-protect
+      (progn
+        (unless id (setf id (aif (and id-slot {object id-slot})
+                                 it
+                                 (let ((items (~ "/^.*\\/(.*)(###|$)/" (!~ "/\\/\\.[^\\/]*$/" (ls dir)) 1)))
+                                    (if items
+                                        (if (= (length (~ "/^\\d+$/" items)) (length items))
+                                            (+ 1 (apply #'max (mapcar #'read-from-string items)))
+                                            (let ((i (str (gensym)))) ; FIXME: this is very stupid (don't use as is)
+                                                 (loop while (ls i) do (setf i (str (gensym))))
+                                                 i))
+                                        0)))))
+        (when id-slot (setf {object id-slot} id))
+        (let ((file (str dir "/" id (if timestamped
+                                      (str "###" (apply #'format
+                                                        (append '(nil "~4,'0D~2,'0D~2,'0D~2,'0D~2,'0D~2,'0D")
+                                                                 (pick (multiple-value-list (get-decoded-time))
+                                                                       5 4 3 2 1 0))))))))
+          (unglob file object :readable t :if-exists :supersede)))
+      (unless timestamped
+        (rm lock))
+      id)))
 
 (defun fload (dir id &key version)
   (unless version
@@ -748,7 +734,7 @@
 (defun fselect (from &key key value limit)
   (let ((lock (str from "/.cl-arno_lock"))
         (loaded 0))
-      (loop while (ls lock) do (sleep 0.1))
+      (loop while (ls lock) do (sleep 0.01))
   (remove-if-not [and _ (equal {_ key} value)]
      (mapcar [if (or (not limit) (< loaded limit))
                  (progn
@@ -780,40 +766,58 @@
 (defun md5 (obj)
   (ironclad-digest obj :md5))
 
-(defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last)
+(defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last expire)
   (unless prefix
-    (setf prefix (~ "/cl-arno-mem-\{([A-E0-9]+)\}/" (str fn) 1))
+    (setf prefix (str "cl-arno-mem-" (~ "/\{([A-E0-9]+)\}/" (str fn) 1)))
     (setf force-reset t))
   (when force-reset (sh (str "rm -f " dir "/" prefix "#*" )))
   #'(lambda (&rest args) 
-    (let ((file (str dir "/"
+    (let ((time (ut))
+          (file (str dir "/"
                      prefix
                      "#" (sha256 (str args)))))
        (loop while (ls (str "." file ".lock")) do (sleep 0.01))
+       (when expire
+         (loop for f in (~ (str "/\\/" prefix "#[^\\/]+/") (ls dir))
+           do (when (> (- time (file-write-date f)) expire)
+                (rm f))))
        (if (ls file)
            (read-from-string (glob file))
            (awith (apply fn args)
-              (sh (str "touch ." file ".lock"))
-              (unglob file it :readable t)
-              (sh (str "rm -f ." file ".lock"))
+              (unglob (str "." file ".lock") "")
+              (unwind-protect
+                (progn
+                  (when remember-last
+                    (awith (~ (str "/\\/" prefix "#[^\\/]+/") (ls dir))
+                      (when (>= (length it) remember-last)
+                         (rm (first (sort it [> (file-write-date _) (file-write-date __)]))))))
+                  (unglob file it :readable t))
+              (rm (str "." file ".lock")))
               it)))))
 
 ; Memoize adapted from OnLisp
-(defun memoize (fn &key remember-last)
+(defun memoize (fn &key remember-last expire)
   (let ((cache (mkhash))
-        (calls nil))
+        (calls (mkhash)))
      #'(lambda (&rest args)
-          (when remember-last
-            (push calls args))
+          (when expire
+                (loop for time = (ut)
+                      for call in (keys calls)
+                      do (when (> (- time {calls call}) expire)
+                            (remhash call cache)
+                            (remhash call calls))))
+          (when (or remember-last expire)
+            (setf {calls args} (ut)))
           (multiple-value-bind (val hit) (gethash args cache)
             (if hit
                 val
                 (progn
-                  (when remember-last
-                     (when (> (hash-table-size cache) remember-last)
-                       (remhash cache {calls -1})
-                       (setf calls {calls 0 remember-last})))
-                  (setf (gethash args cache)
+                  (when (and remember-last
+                             (>= (hash-table-count cache) remember-last))
+                     (awith (first (sort (keys calls) [> {calls _} {calls __}]))
+                       (remhash it calls)
+                       (remhash it cache)))
+                  (setf {cache args}
                         (apply fn args))))))))
 
 (defstruct-and-export date
@@ -988,4 +992,17 @@
     result)))
 
 (defun pe ()
-  (eval (read-from-string (sh "xcopy -o"))))
+  "Eval what's in the X selection clibpoard"
+  (eval (read-from-string (sh "xclip -o"))))
+
+(defun eval-file-loop (file)
+  (let ((offset 0)
+        (form nil))
+    (loop do (sleep 1)
+             (print (str "offset : " offset))
+             (with-open-file (f file)
+                (file-position f offset)
+                (loop until (eq form 'EOF)
+                      do (setf form (read f nil 'EOF))
+                         (unless (eq form 'EOF) (eval form)))
+                (setf offset (file-position f))))))

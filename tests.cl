@@ -243,13 +243,114 @@
        :expect '("1")))
 
   (test-suite ("memoize")
-    (test "memoize"
+
+    (test "memoize 1"
         (let ((a 0))
            (awith (memoize [+ _ a])
              {it 0}
              (setf a 1)
              {it 0}))
-        :expect 0))
+        :expect 0)
+
+    (test "memoize 2"
+            (let ((a 0))
+               (awith (memoize [+ _ a] :remember-last 1)
+                 {it 0}
+                 (setf a 1)
+                 {it 1}
+                 {it 0}))
+            :expect 1)
+
+    (test "memoize 3"
+            (let ((a 0))
+               (awith (memoize [+ _ a] :expire 1)
+                 {it 0}
+                 (setf a 1)
+                 (sleep 2)
+                 {it 0}))
+            :expect 1)
+
+    (test "memoize 4"
+            (let ((a 0))
+               (awith (memoize [+ _ a] :remember-last 1 :expire 10)
+                 {it 0}
+                 (setf a 1)
+                 {it 1}
+                 {it 0}))
+            :expect 1)
+
+    (test "memoize 5"
+            (let ((a 0))
+               (awith (memoize [+ _ a] :remember-last 3)
+                 {it 0}
+                 (setf a 1)
+                 {it 1}
+                 {it 2}
+                 {it 3}
+                 {it 0}))
+            :expect 1)
+    )
+
+  (test-suite ("memoize to disk")
+
+    (test "memoize-to-disk 1"
+        (let ((a 0))
+           (awith (memoize-to-disk [+ _ a])
+             {it 0}
+             (setf a 1)
+             {it 0}))
+        :expect 0)
+
+    (test "memoize-to-disk 2"
+            (let ((a 0))
+               (awith (memoize-to-disk [+ _ a] :remember-last 1)
+                 {it 0}
+                 (setf a 1)
+                 {it 1}
+                 {it 0}))
+            :expect 1)
+
+    (test "memoize-to-disk 3"
+            (let ((a 0))
+               (awith (memoize-to-disk [+ _ a] :expire 1)
+                 {it 0}
+                 (setf a 1)
+                 (sleep 2)
+                 {it 0}))
+            :expect 1)
+
+    (test "memoize-to-disk 4"
+            (let ((a 0))
+               (awith (memoize-to-disk [+ _ a] :remember-last 1 :expire 10)
+                 {it 0}
+                 (setf a 1)
+                 {it 1}
+                 {it 0}))
+            :expect 1)
+
+    (test "memoize-to-disk 5"
+            (let ((a 0))
+               (awith (memoize-to-disk [+ _ a] :remember-last 3)
+                 {it 0}
+                 (setf a 1)
+                 {it 1}
+                 {it 2}
+                 {it 3}
+                 {it 0}))
+            :expect 1)
+
+    (test "memoize-to-disk 6"
+            (let ((a 0))
+               (awith (memoize-to-disk [+ _ a] :remember-last 3)
+                 {it 0}
+                 {it 1}
+                 {it 2}
+                 {it 3}
+                 (setf a 1)
+                 {it 3}))
+            :expect 4)
+
+    )
 
   (test-suite ("time and date")
          (test "ut"
