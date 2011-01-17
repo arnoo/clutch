@@ -1,6 +1,6 @@
 (defpackage :cl-arno
     (:use     #:cl)
-    (:export  #:date #:d- #:d+ #:d-delta #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:fselect1 #:mkdir #:md5 #:sha1 #:sha256 #:memoize #:memoize-to-disk #:with-each-line #:ut #:miltime #:y-m-d #:mapflines #:xor #:date-wom #:date-week #:d= #:d/= #:d> #:d< #:lpad #:rpad)
+    (:export  #:date #:d- #:d+ #:d-delta #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:fselect1 #:mkdir #:md5 #:sha1 #:sha256 #:memoize #:memoize-to-disk #:with-each-line #:ut #:miltime #:y-m-d #:mapflines #:xor #:date-wom #:date-week #:d= #:d/= #:d> #:d< #:lpad #:rpad #:before #:after)
     #-abcl (:export #:getenv))
 
 (in-package :cl-arno)
@@ -1009,3 +1009,22 @@
                        (remhash it cache)))
                   (setf {cache args}
                         (apply fn args))))))))
+(defmacro before (fn &rest body)
+  (let ((sym (gensym)))
+    `(progn
+       (let ((,sym (fdefinition ,fn)))
+         (setf (fdefinition ,fn)
+               (lambda (&rest args)
+                 ,@body
+                 (apply ,sym args)))))))
+
+(defmacro after (fn &rest body)
+  (let ((sym  (gensym))
+        (sym2 (gensym)))
+    `(progn
+       (let ((,sym (fdefinition ,fn)))
+         (setf (fdefinition ,fn)
+               (lambda (&rest args)
+                 (let ((,sym2 (apply ,sym args)))
+                   ,@body
+                   ,sym2)))))))
