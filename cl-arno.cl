@@ -549,11 +549,11 @@
                 (let ((out (ext:run-program "/bin/sh" :arguments () :input ar :wait t :output :stream)))
                   (glob out)))
     #+cmu     (with-output-to-string (s) (ext:run-program +shell+ () :input ar :output s :error s :wait t))
-    #+sbcl    (with-output-to-string (s) (sb-ext:run-program +shell+ () :input ar :output s :error s :wait t)))
+    #+sbcl    (with-output-to-string (s) (sb-ext:run-program +shell+ () :input ar :output s :error s :wait t))
     #+ccl     (with-output-to-string (s) (ccl:run-program +shell+ () :wait t :output s :error t :input ar))
-    #+abcl    (with-output-to-string (s) (ext:run-shell-command (str +shell+ " " command) :output s))
+    #+abcl    (with-output-to-string (s) (ext:run-shell-command (str +shell+ " -c \"" (~s "/\"/\\\"/g" command) "\"") :output s))
     #-(or allegro clisp cmu sbcl ccl abcl)
-              (error 'not-implemented :proc (list 'pipe-input prog args)))
+              (error 'not-implemented :proc (list 'pipe-input prog args))))
 
 ; get-env from stumpwm (also found in the CL cookbook) (GPL or better)
 #-abcl ;abcl has it predefined !
