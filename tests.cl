@@ -676,4 +676,20 @@
       (test "xor nil (+ 1 3)"
         (xor nil (+ 1 3))
         :expect 4)
+  )
+
+  (test-suite ("before / after")
+    (setf b 2)
+    (defun a (x) (+ x b))
+    (before 'a (setf b 3))
+    (after 'a (setf b 4))
+    (setf b 2)
+
+    (test "before"
+      (a 0)
+      :expect 3)
+
+    (test "after"
+      b 
+      :expect 4)
   ))
