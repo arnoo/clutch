@@ -1010,6 +1010,11 @@
                   (setf {cache args}
                         (apply fn args))))))))
 (defmacro before (fn &rest body)
+  "Redefines <fn> so that <body> gets executed first each time <fn> is called. <body> can access the arguments passed to fn through variable <args>
+  
+  Example :
+    (defun a (x) (+ x 2))
+    (before 'a (format t \"a to be called with args ~A\" args)) "
   (let ((sym (gensym)))
     `(progn
        (let ((,sym (fdefinition ,fn)))
@@ -1019,6 +1024,11 @@
                  (apply ,sym args)))))))
 
 (defmacro after (fn &rest body)
+  "Redefines <fn> so that <body> gets executed next each time <fn> is called. <body> can access the arguments passed to fn through variable <args>
+  
+  Example :
+    (defun a (x) (+ x 2))
+    (after 'a (format t \"a was called with args ~A\" args)) "
   (let ((sym  (gensym))
         (sym2 (gensym)))
     `(progn
