@@ -71,8 +71,8 @@
                   (lambda (&rest args)
                           (declare (ignorable args))
                           (cond
-                            ,@(foreach (remove-if-not [and (listp (car _)) (eq (caar _) f)] mocks)
-                                 `((equal args (list ,(cadar it))) ,(cadr it)))
+                            ,@(loop for it in (remove-if-not [and (listp (car _)) (eq (caar _) f)] mocks)
+                                 collect `((equal args (list ,(cadar it))) ,(cadr it)))
                             (t ,(aif (remove-if-not [and (atom (car _)) (eq (car _) f)] mocks)
                                       (cadar it)
                                       '(error "unexpected arguments"))))

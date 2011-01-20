@@ -158,7 +158,7 @@
     ; :expect #\g)
     )
 
-  (test-suite ("in, range, foreach")
+  (test-suite ("in, range")
       (test "In <list> <element> -> t"
         (in (list 1 2 3) 1)
         :expect t)
@@ -178,15 +178,6 @@
       (test "Range 1..-1 by -1"
         (range 1 -1 -1)
         :expect '(1 0 -1))
-
-      (test "Foreach"
-        (foreach (list 1 2)
-          (list it @it))
-        :expect '((1 0) (2 1)))
-
-      ;(test "Foreach as"
-      ;   (foreach (list 1 2) as e (list e @e))
-      ; :expect '((1 0) (2 1)))
       )
 
   (test-suite ("regexps")

@@ -1,6 +1,44 @@
+;
+;   Copyright 2011 Arnaud Betremieux <arno@arnoo.net>, except where
+;   mentioned as having been copied from somebody else's code.
+;
+;   This program is free software: you can redistribute it and/or modify
+;   it under the terms of the GNU General Public License as published by
+;   the Free Software Foundation, either version 3 of the License, or
+;   (at your option) any later version.
+;
+;   This program is distributed in the hope that it will be useful,
+;   but WITHOUT ANY WARRANTY; without even the implied warranty of
+;   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;   GNU General Public License for more details.
+;
+;   You should have received a copy of the GNU General Public License
+;   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+;
+
+(defpackage :on-lisp
+    (:use    #:cl)
+    (:export #:mkstr #:reread #:symb #:aif #:awhen #:aand #:awhile #:compose #:alambda #:it))
+(in-package :on-lisp)
+; Load Paul Graham's code from On Lisp in a package and export what we use.
+; The code is kept in the external file onlisp.lisp so it can be redistributed
+; verbatim as per PG's request at the end of the file.
+(load "onlisp.lisp")
+
 (defpackage :cl-arno
-    (:use     #:cl)
-    (:export  #:date #:d- #:d+ #:d-delta #:enable-arc-lambdas #:enable-brackets #:in #:range #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:lc #:uc #:mkstr #:str #:str+= #:reread #:symb #:vector-to-list* #:~ #:~s #:!~ #:resplit #:split #:join #:x #:range #:glob #:unglob #:glob-lines #:select #:f= #:f/= #:flatten #:sh #:system #:foreach #:import-forced #:with-temporary-file #:it #:ls #:argv #:mkhash #:pick #:o #:keys #:-> #:defstruct-and-export #:keyw #:rm #:fload #:fsave #:fselect #:fselect1 #:mkdir #:md5 #:sha1 #:sha256 #:memoize #:memoize-to-disk #:with-each-line #:ut #:miltime #:y-m-d #:mapflines #:xor #:date-wom #:date-week #:d= #:d/= #:d> #:d< #:lpad #:rpad #:before #:after)
+    (:use     #:cl #:on-lisp)
+    (:export  #:date #:d- #:d+ #:d-delta #:ut #:miltime #:y-m-d #:date-wom #:date-week #:d= #:d/= #:d> #:d<
+              #:enable-arc-lambdas #:enable-brackets #:defstruct-and-export 
+              #:in #:range #:vector-to-list* #:flatten #:pick
+              #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond
+              #:lc #:uc #:str #:reread #:symb #:keyw  #:~ #:~s #:!~ #:resplit #:split #:join #:x #:lpad #:rpad
+              #:glob #:unglob #:glob-lines #:with-each-line #:mapflines 
+              #:f= #:f/= #:with-temporary-file #:it
+              #:sh #:ls #:argv #:mkhash #:o #:keys #:-> #:rm #:mkdir 
+              #:fload #:fsave #:fselect #:fselect1
+              #:md5 #:sha1 #:sha256
+              #:memoize #:memoize-to-disk #:before #:after #:alambda
+              #:xor)
     #-abcl (:export #:getenv))
 
 (in-package :cl-arno)
@@ -17,44 +55,24 @@
 (defvar +days-abbr+ (list "Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))
 (defvar +days+ (list "Monday" "Tuesday" "Wednesday" "Thursday" "Friday" "Saturday" "Sunday"))
 
-; mkstr by P.G. (On Lisp)
-(defun mkstr (&rest args)
-  (with-output-to-string (s)
-     (dolist (a args) (princ a s))))
-
-; reread by P.G. (On Lisp)
-(defun reread (&rest args)
-  (values (read-from-string (apply #'mkstr args))))
-
-; symb by P.G. (On Lisp)
-(defun symb (&rest args)
-  (values (intern (apply #'mkstr args))))
-
 (defun keyw (&rest args)
   (values (intern (string-upcase (apply #'mkstr args)) "KEYWORD")))
 
-;flatten (Adapted from On Lisp)
 (defun flatten (&rest x)
-  (labels ((rec (x acc)
-                (cond ((null x) acc)
-                      ((atom x) (cons x acc))
-                      (t (rec (car x) (rec (cdr x) acc))))))
-          (rec x nil)))
+  (on-lisp::flatten x))
 
 (defun str (&rest args)
   (apply #'mkstr (remove-if-not #'identity (flatten args))))
 
-(defmacro str+= (place &rest args)
-  `(setf ,place (apply #'str (list ,place ,@args))))
-
 ; **** Lambda expressions ala Arc by Brad Ediger ***
-;CL-USER> ([+ 1 _] 10)
-;11
-;CL-USER> ([+ _ __] 1 2)
-;3
-;added possibility of functional position for _ or __ :
-;CL-USER> ([_ 1 2] (list 1 2 3))
-;(2 3)
+; CL-USER> ([+ 1 _] 10)
+; 11
+; CL-USER> ([+ _ __] 1 2)
+; 3
+; added possibility of functional position for _ or __,
+; based on {} reader
+; CL-USER> ([_ 1 2] (list 1 2 3))
+; (2 3)
 
 (defun square-bracket-reader (stream char)
   (declare (ignore char))
@@ -149,45 +167,17 @@
 
 ;function composition from on-lisp (originally "compose")
 (defun o (&rest fns)
-  "compose functions"
-  (if fns
-      (let ((fn1 (car (last fns)))
-            (fns (butlast fns))) #'(lambda (&rest args)
-          (reduce #'funcall fns
-                  :from-end t :initial-value (apply fn1 args)))) #'identity))
+  (apply #'compose fns))
 
 ;*** in ala python ***
 (defun in (seq elmt)
 	"does seq contain elmt ?"
 	(not (null (position elmt seq :test #'equal))))
-
-; *** Paul Graham's anaphoric if (cf. On Lisp) ***
-(defmacro aif (test-form then-form &optional else-form)
-  "Executes <body> with <it> bound to <expr> if <expr> is not nil"
-	`(let ((it ,test-form)) 
-		(if it ,then-form ,else-form)))
-
-; *** Paul Graham's anaphoric when (cf. On Lisp) ***
-(defmacro awhen (test-form &rest then-forms)
-  "Executes <body> with <it> bound to <expr> if <expr> is not nil"
-	`(let ((it ,test-form)) 
-	 	 (when it ,@then-forms)))
-
-; *** Paul Graham's anaphoric and (cf. On Lisp) ***
-(defmacro aand (&rest args)
-  (cond ((null args) t)
-        ((null (cdr args)) (car args))
-        (t `(aif ,(car args) (aand ,@(cdr args))))))
  
 (defmacro aunless (test-form &rest then-forms)
   "Executes <body> with <it> bound to <expr> if <expr> is nil"
   `(let ((it ,test-form))
      (unless it ,@then-forms)))
-
-; *** Paul Graham's anaphoric while (cf. On Lisp) ***
-(defmacro awhile (expr &body body) 
-  "Executes <body> with <it> bound to <expr> as long as <expr> is not nil"
-	`(do ((it ,expr ,expr)) ((not it)) ,@body))
 
 (defmacro awith (expr &body body)
   "Executes <body> with <it> bound to <expr>"
@@ -208,15 +198,6 @@
   "Converts an object to an uppercase string"
   (string-upcase (str object)))
 
-; *** Paul Graham's anaphoric function from arc ***
-; CL version from http://setagaya.googlecode.com/svn-history/r25/trunk/home/mc/arc-compat/anaphoric-op.lisp
-(defmacro afn (parms &body body)
-    "Creates an anaphoric function, which can be called recursively
-  with the name self. This allows a recursive function to be
-  created without assigning it a name."
-    `(labels ((self ,parms ,@body))
-                  #'self))
-
 (defun vector-to-list* (object)
   (let ((result (list nil))
         (length (length object)))
@@ -229,15 +210,19 @@
 
 (defun parse-re (re)
   (let ((result (list "")))
-       (loop for i from 1 below (length re)
-             do (if (and (char= {re i} #\/) (char/= {re (- i 1)} {"\\" 0})) 
-                    (push "" result)
-                    (setf (car result) (mkstr (car result) {re i}))))
-       (when (< (length result) 3) (push (car result) result) (setf (cadr result) ""))
-       (if (char/= {re 0} #\/) (setf (car result) (mkstr {re 0} (car result))))
-       (if (in (car result) #\i) (setf (caddr result) (mkstr "(?i)" (caddr result))))
-       (setf (cadr result) (cl-ppcre::regex-replace-all "\\\\/" (cadr result) "/"))
-       (reverse result)))
+     (loop for i from 1 below (length re)
+           do (if (and (char= {re i} #\/) (char/= {re (- i 1)} {"\\" 0})) 
+                  (push "" result)
+                  (setf (car result) (mkstr (car result) {re i}))))
+     (when (< (length result) 3)
+        (push (car result) result)
+        (setf (cadr result) ""))
+     (when (char/= {re 0} #\/)
+        (setf (car result) (mkstr {re 0} (car result))))
+     (when (in (car result) #\i)
+        (setf (caddr result) (mkstr "(?i)" (caddr result))))
+     (setf (cadr result) (cl-ppcre::regex-replace-all "\\\\/" (cadr result) "/"))
+     (reverse result)))
 
 ;*** Regexp match ala Perl ***
 (defun ~ (re string-or-list &optional match-nb1 match-nb2)
@@ -326,28 +311,15 @@
     (loop for i below nb do (setf s (concatenate (class-of seq) s seq)))
     (coerce s (class-of seq))))
 
-(defmacro foreach (list &rest body)
-  "Executes body for each element of <list>, with:
-    <it>               bound to the current element
-    <its-index>        bound to its index in the list,"
-    (let ((var (if (eq (car body) 'as)
-                   (symbol-name (cadr body))
-                   "it")))
-     `(loop for i from 0 below (length ,list) collect
-        (let ((,(reread var)         {,list i})
-              (,(reread "@" var)  i))
-           (declare (ignorable ,(reread var) ,(reread "@" var)))
-           (progn ,@(if (eq (car body) 'as) {body 1 -1} body))))))
-
-; *** Range nearly ala Python (in Python, end is not included) ***
-; >(range 1 10)
-; (1 2 3 4 5 6 7 8 9 10)
-; >(range -10 -100 -30)
-; (-10 -40 -70 -100)
-; >(range 10)
-; (0 1 2 3 4 5 6 7 8 9 10)
 (defun range (a &optional b (step 1))
-	"Builds a range of numbers"
+	"Builds a range of numbers
+   >(range 1 10)
+   (1 2 3 4 5 6 7 8 9 10)
+   >(range -10 -100 -30)
+   (-10 -40 -70 -100)
+   >(range 10)
+   (0 1 2 3 4 5 6 7 8 9 10)
+  "
 	(let ((start (if b a 0)) (end (if b b a)))
 		(if (> step 0)
 			(loop for x from start to end by step collect x)		
@@ -386,7 +358,11 @@
 
 (defun glob (path-or-stream &key binary (offset 0) limit)
   "Globs the whole provided file, url or stream into a string or into a byte array if <binary>,
-  starting at offset. If offset is negative, start from end-offset. Read at most limit characters."
+  starting at offset. If offset is negative, start from end-offset. Read at most limit characters.
+  (glob \"http://www.google.com\")
+  (glob \"/etc/hosts\" :offset 10)
+  (glob stream :offset 2 :limit 20)
+   "
   (when (and limit (< limit 0))
     (error "Limit must be a positive integer (number of lines)"))
   (if (looks-like-file path-or-stream)
@@ -430,6 +406,7 @@
              (aif limit {seq 0 limit} seq)))))
 
 (defun unglob (filename object &key if-exists binary readable)
+  "Print <object> into <filename>"
   (progn
     (with-open-file (stream filename
                             :direction :output
@@ -452,6 +429,7 @@
     total))
 
 (defun back-n-lines (file-stream n)
+  "Go back n lines in a file stream"
   (let ((buf (make-string 4096))
         (lines 0))
       (loop until (or (>= lines n) (< (length buf) 4096))
@@ -539,7 +517,6 @@
 (defun lpad (string chars &key (with " "))
   (str (x (str with) (max 0 (- chars (length string)))) string))
     
-
 ; sh based on run-prog-collect-output from stumpwm (GPL)
 (defun sh (command)
   "run a command and read its output."
@@ -555,7 +532,7 @@
     #-(or allegro clisp cmu sbcl ccl abcl)
               (error 'not-implemented :proc (list 'pipe-input prog args))))
 
-; get-env from stumpwm (also found in the CL cookbook) (GPL or better)
+; get-env from stumpwm (GPL) (also found in the CL cookbook) 
 #-abcl ;abcl has it predefined !
 (defun getenv (var)
   "Return the value of the environment variable."
@@ -691,9 +668,9 @@
 (defmacro defstruct-and-export (structure &rest members)
 	(append
 	  `(progn
-      ,(append `(defstruct ,structure ,@members))
-      ,`(export ,`(quote ,(intern (concatenate 'string "MAKE-" (symbol-name structure)))))
-      ,`(export ,`(quote ,(intern (concatenate 'string "COPY-" (symbol-name structure))))))
+       ,(append `(defstruct ,structure ,@members))
+       ,`(export ,`(quote ,(intern (concatenate 'string "MAKE-" (symbol-name structure)))))
+       ,`(export ,`(quote ,(intern (concatenate 'string "COPY-" (symbol-name structure))))))
      (mapcar
        #'(lambda (member)
            `(export ,`(quote ,(intern (concatenate 'string (symbol-name structure) "-" (symbol-name (if (listp member) (car member) member)))))))
@@ -712,7 +689,7 @@
                                     (if items
                                         (if (= (length (~ "/^\\d+$/" items)) (length items))
                                             (+ 1 (apply #'max (mapcar #'read-from-string items)))
-                                            (let ((i (str (gensym)))) ; FIXME: this is very stupid (don't use as is)
+                                            (let ((i (str (gensym)))) ; TODO: this is very stupid (don't use as is)
                                                  (loop while (ls i) do (setf i (str (gensym))))
                                                  i))
                                         0)))))
@@ -776,9 +753,9 @@
 (defun date-rfc-2822 (date)
   "Returns a date in the RFC-2822 format : Mon, 07 Aug 2006 12:34:56 -0600"
   (format nil "~A, ~2,'0D ~A ~4,'0D ~2,'0D:~2,'0D:~2,'0D ~A"
-       {(list "Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun") (date-dow date)}
+       {+days-abbr+ (date-dow date)}
        (date-day date)
-       {(list "" "Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec") (date-month date)}
+       {+months-abbr+ (date-month date)}
        (date-year date)
        (date-h date)
        (date-m date)
@@ -939,22 +916,6 @@
                (setf result a))))
     result)))
 
-(defun pe ()
-  "Eval what's in the X selection clibpoard"
-  (eval (read-from-string (sh "xclip -o"))))
-
-(defun eval-file-loop (file)
-  (let ((offset 0)
-        (form nil))
-    (loop do (sleep 1)
-             (print (str "offset : " offset))
-             (with-open-file (f file)
-                (file-position f offset)
-                (loop until (eq form 'EOF)
-                      do (setf form (read f nil 'EOF))
-                         (unless (eq form 'EOF) (eval form)))
-                (setf offset (file-position f))))))
-
 (defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last expire)
   (unless prefix
     (setf prefix (str "cl-arno-mem-" (~ "/\{([A-E0-9]+)\}/" (str fn) 1)))
@@ -985,7 +946,7 @@
                 (rm lock))
               it)))))
 
-; Memoize adapted from OnLisp
+; Memoize adapted from Paul Graham's "On Lisp" version
 (defun memoize (fn &key remember-last expire)
   (let ((cache (mkhash))
         (calls (mkhash)))
@@ -1009,6 +970,7 @@
                        (remhash it cache)))
                   (setf {cache args}
                         (apply fn args))))))))
+
 (defmacro before (fn &rest body)
   "Redefines <fn> so that <body> gets executed first each time <fn> is called. <body> can access the arguments passed to fn through variable <args>
   
