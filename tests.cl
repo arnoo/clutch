@@ -1,4 +1,5 @@
-(load "cl-arno-test.cl")
+(load "cl-arno.cl")
+(load "../cl-arno-test/cl-arno-test.cl")
 
 (defpackage :cl-arno-tests (:use #:cl #:cl-arno #:cl-arno-test))
 (in-package :cl-arno-tests)
@@ -595,12 +596,6 @@
       (test "Save timestamped 2"
         (fsave "test" "/tmp/tarno" :id 2 :timestamped t)
         :expect   2))
-
-      (defun f (x) x)
-
-      ;(test "with-mocks"
-      ;  (with-mocks ((f 4) ((f 3) 2)) (list (f 3) (f 2) (f 4)))
-      ;  :expect '(2 4 4))
 
       (test "mkhash"
         {(mkhash "a" 2 "b" 3) "a"}

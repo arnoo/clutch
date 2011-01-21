@@ -21,7 +21,7 @@
     (:export #:mkstr #:reread #:symb #:aif #:awhen #:aand #:awhile #:compose #:alambda #:it))
 (in-package :on-lisp)
 ; Load Paul Graham's code from On Lisp in a package and export what we use.
-; The code is kept in the external file onlisp.lisp so it can be redistributed
+; The code is kept in the external file onlisp.lisp so it can be kept
 ; verbatim as per PG's request at the end of the file.
 (load "onlisp.lisp")
 
@@ -30,14 +30,14 @@
     (:export  #:date #:d- #:d+ #:d-delta #:ut #:miltime #:y-m-d #:date-wom #:date-week #:d= #:d/= #:d> #:d<
               #:enable-arc-lambdas #:enable-brackets #:defstruct-and-export 
               #:in #:range #:vector-to-list* #:flatten #:pick
-              #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond
+              #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:alambda
               #:lc #:uc #:str #:reread #:symb #:keyw  #:~ #:~s #:!~ #:resplit #:split #:join #:x #:lpad #:rpad
               #:glob #:unglob #:glob-lines #:with-each-line #:mapflines 
               #:f= #:f/= #:with-temporary-file #:it
-              #:sh #:ls #:argv #:mkhash #:o #:keys #:-> #:rm #:mkdir 
+              #:sh #:ls #:argv #:mkhash #:keys #:rm #:mkdir 
               #:fload #:fsave #:fselect #:fselect1
               #:md5 #:sha1 #:sha256
-              #:memoize #:memoize-to-disk #:before #:after #:alambda
+              #:memoize #:memoize-to-disk #:before #:after #:o 
               #:xor)
     #-abcl (:export #:getenv))
 
@@ -640,30 +640,6 @@
   (dolist (s (closer-mop:class-slots (find-class class)))
      (when (eql (closer-mop:slot-definition-name s) slot)
         (return-from slot-type (closer-mop:slot-definition-type s)))))
-
-(defun -> (o type &key exclude only unflatten)
-  (declare (optimize debug))
-  (cond
-     ((or (eq type t) (eq (type-of o) type))
-        o)
-     ((and (numberp o) (eq 'string type))
-        (format nil "~S" o))
-     ((and (keys o) (in '(alist plist hash-table) type))
-        (let ((o2 (case type
-                    ((plist alist) nil)
-                    (hash-table (make-hash-table)))))
-          (loop for key in (sort (or only (keys o)) [string> (str _) (str __)]) do (funcall (case type
-                              (plist [setf (getf o2 key) _])
-                              (alist [nconc o2 (list (cons key _))])
-                              (hash-table [setf (gethash key o2) _]))
-                          {o key}))
-          o2))
-     ((and (keys o) (or (subtypep type 'structure-object) (subtypep type 'standard-object)))
-        (apply (symb "MAKE-" type)
-          (loop for key in (or only (slot-names type))
-                collect (reread (symb ":" key))
-                collect (-> (if unflatten o {o key}) (slot-type type key) :unflatten unflatten :exclude exclude :only only))))
-     (t (cl:coerce o type))))
 
 (defmacro defstruct-and-export (structure &rest members)
 	(append
