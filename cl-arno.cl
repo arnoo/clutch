@@ -1010,7 +1010,7 @@
                    ,@body
                    ,sym2)))))))
 
-(defun eval-file-loop (file)
+(defun file-repl (file)
   (let ((offset 0)
         (form nil))
     (loop do (sleep 1)
