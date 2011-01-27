@@ -40,23 +40,7 @@
 
     (test "str (list (list 1 2 3) 2)"
       (str (list (list 1 2 3) 2))
-      :expect "1232")
-    
-    (test "nb -> string"
-      (-> 1 'string)
-      :expect "1")
-
-    ;(test "hash-table -> plist"
-    ;  (-> (mkhash 'a 1 'b 2) 'alist)
-    ;  :expect (list a 1 b 2))
-
-    ;(test "hash-table -> alist"
-    ;  (-> (mkhash 'a 1 'b 2) 'plist)
-    ;  :expect '((a . 1) (b . 2)))
-
-    (test "hash-table -> struct"
-      (-> (mkhash 'slot1 (mkhash 'slot1 "a" 'slot2 2 'slot3 (list 1 2)) 'slot2 2) 'test-struct2)
-      :expect (make-test-struct2 :slot1 (make-test-struct :slot1 "a" :slot2 2 :slot3 (list 1 2)) :slot2 2)))
+      :expect "1232"))
 
   (test-suite ("anaphoric macros")
     (test "Aif 1"
@@ -597,6 +581,7 @@
         (fsave "test" "/tmp/tarno" :id 2 :timestamped t)
         :expect   2))
 
+  (test-suite ("keys, mkhash")
       (test "mkhash"
         {(mkhash "a" 2 "b" 3) "a"}
         :expect 2)
@@ -619,7 +604,7 @@
 
       (test "keys obj"
         (keys (list 'a 1 'b 2))
-        :expect '(a b))
+        :expect '(a b)))
 
   (test-suite ("hashing algorithms")
       (test "md5"
@@ -665,11 +650,11 @@
   )
 
   (test-suite ("before / after")
-    (setf b 2)
-    (defun a (x) (+ x b))
-    (before 'a (setf b 3))
-    (after 'a (setf b 4))
-    (setf b 2)
+    (let ((b 2))
+      (defun a (x) (+ x b))
+      (before 'a (setf b 3))
+      (after 'a (setf b 4))
+      (setf b 2)
 
     (test "before"
       (a 0)
@@ -678,4 +663,4 @@
     (test "after"
       b 
       :expect 4)
-  ))
+  )))

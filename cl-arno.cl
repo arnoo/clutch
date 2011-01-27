@@ -23,7 +23,14 @@
 ; Load Paul Graham's code from On Lisp in a package and export what we use.
 ; The code is kept in the external file onlisp.lisp so it can be kept
 ; verbatim as per PG's request at the end of the file.
-(load "onlisp.lisp")
+
+(defun ignore-warning (condition)
+   (declare (ignore condition))
+      (muffle-warning))
+
+(handler-bind ((warning #'ignore-warning))
+    (load "../cl-arno/onlisp.lisp"))
+
 
 (defpackage :cl-arno
     (:use     #:cl #:on-lisp)
@@ -31,7 +38,7 @@
               #:enable-arc-lambdas #:enable-brackets #:defstruct-and-export 
               #:in #:range #:vector-to-list* #:flatten #:pick
               #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:alambda
-              #:lc #:uc #:str #:reread #:symb #:keyw  #:~ #:~s #:!~ #:resplit #:split #:join #:x #:lpad #:rpad
+              #:lc #:uc #:str #:reread #:symb #:keyw  #:~ #:~s #:!~ #:resplit #:split #:join #:x #:lpad #:rpad #:lines
               #:glob #:unglob #:glob-lines #:with-each-line #:mapflines 
               #:f= #:f/= #:with-temporary-file #:it
               #:sh #:ls #:argv #:mkhash #:keys #:rm #:mkdir 
@@ -90,6 +97,20 @@
 
 (enable-arc-lambdas)
 
+; Accessor macro :
+; > (setf a (list 1 2 3))
+; > {a 2} 
+; 3
+; > (setf f (lambda (x) (+ x 2)))
+; > {f 3}
+; 5
+; > {"abcde" 2 4}
+; "cd"
+; > {"abcde" 2 -1}
+; "cde"
+; > (defstruct s a b)
+; > {(make-s :a 1 :b 2) 'a}
+; > 1
 (defun access (object start &rest args)
   (cond ((null object) nil)
         ((and (or (listp object) (vectorp object)) (numberp start))
@@ -165,11 +186,9 @@
 (defun pick (object &rest places)
   (mapcar [_ object] places))
 
-;function composition from on-lisp (originally "compose")
 (defun o (&rest fns)
   (apply #'compose fns))
 
-;*** in ala python ***
 (defun in (seq elmt)
 	"does seq contain elmt ?"
 	(not (null (position elmt seq :test #'equal))))
@@ -184,6 +203,7 @@
 	`(let ((it ,expr)) ,@body))
 
 (defmacro acond (&rest forms)
+  "Anaphoric cond : like a regular cond, except the result of evaluating the condition form can be accessed as <it>"
   (let ((blockname (gensym)))
     `(block ,blockname
       ,@(loop for form in forms
@@ -224,7 +244,6 @@
      (setf (cadr result) (cl-ppcre::regex-replace-all "\\\\/" (cadr result) "/"))
      (reverse result)))
 
-;*** Regexp match ala Perl ***
 (defun ~ (re string-or-list &optional match-nb1 match-nb2)
   "If <string-or-list> is a string:
     returns nil if regular expression <re> does not match the string
@@ -272,7 +291,6 @@
         (if (not (cl-ppcre::scan regexp string-or-list))
             string-or-list))))
 
-;*** Regexp substitution a la Perl (or nearly...) ***
 (defun ~s (re string-or-list &optional match-nb)
   "Replaces all substrings that match <re> in <string> by <replacement>.
   <flags> can contain Perl regexp flags like g
@@ -290,6 +308,9 @@
 (defun resplit (re string)
   (cl-ppcre:split (car (parse-re re)) string))
 
+(defun lines (str)
+  (resplit "/\\r\\n|\\n/" str))
+
 (defun split (sep seq)
   (if (= (length sep) 0)
       (coerce seq 'list)
@@ -304,9 +325,10 @@
         (concatenate (class-of join-seq) (car it) join-seq (join join-seq (cdr it)))
         (car it))))
 
-;*** x a la perl/python/ruby ***
 (defun x (seq nb)
-  "returns a sequence composed of <nb> times <sequence>"
+  "returns a sequence composed of <nb> times <sequence>
+   > (x \"a\" 3)
+   \"aaa\""
   (let ((s ""))
     (loop for i below nb do (setf s (concatenate (class-of seq) s seq)))
     (coerce s (class-of seq))))
@@ -505,11 +527,23 @@
               ,@body)
            (delete-file ,filename)))))
 
-(defun f= (f &rest objects)
-  (apply #'equal (mapcar f objects)))
 
-(defun f/= (&rest args)
-  (not (apply #'f= args)))
+;
+; Comparison of results of function application : 
+; (defunfcom = /= < > <= >=)
+; (format nil "Compares with ~A the results of applying f to each object ~% Ex : (f~A #'sin 1 2) is equivalent to (~A (sin 1) (sin 2))" fn fn fn)
+
+(defmacro defunfcom (&rest fns)
+  `(progn
+      ,@(loop for fn in fns
+              collect `(defun ,(symb "F" fn) (f &rest objects)
+                          ,(format nil "Compares with ~A the results of applying f to each object ~% Ex : (f~A #'sin 1 2) is equivalent to (~A (sin 1) (sin 2))" fn fn fn)
+                          (apply (function ,fn) (mapcar f objects))))))
+
+(defunfcom = /= < > <= >=)
+
+(defun f-equal (f x y)
+  (equal {f x} {f y}))
 
 (defun rpad (string chars &key (with " "))
   (str string (x (str with) (max 0 (- chars (length string))))))
@@ -922,7 +956,6 @@
                 (rm lock))
               it)))))
 
-; Memoize adapted from Paul Graham's "On Lisp" version
 (defun memoize (fn &key remember-last expire)
   (let ((cache (mkhash))
         (calls (mkhash)))
@@ -976,3 +1009,16 @@
                  (let ((,sym2 (apply ,sym args)))
                    ,@body
                    ,sym2)))))))
+
+(defun eval-file-loop (file)
+  (let ((offset 0)
+        (form nil))
+    (loop do (sleep 1)
+             (setf form nil)
+             (with-open-file (f file)
+                (file-position f offset)
+                (loop until (eq form 'EOF)
+                      do (setf form (read f nil 'EOF))
+                         (unless (eq form 'EOF) (eval form)))
+                (setf offset (file-position f))))))
+
