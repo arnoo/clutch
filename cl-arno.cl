@@ -1000,15 +1000,13 @@
   Example :
     (defun a (x) (+ x 2))
     (after 'a (format t \"a was called with args ~A\" args)) "
-  (let ((sym  (gensym))
-        (sym2 (gensym)))
+  (let ((sym  (gensym)))
     `(progn
        (let ((,sym (fdefinition ,fn)))
          (setf (fdefinition ,fn)
                (lambda (&rest args)
-                 (let ((,sym2 (apply ,sym args)))
-                   ,@body
-                   ,sym2)))))))
+                 (prog1 (apply ,sym args)
+                        ,@body)))))))
 
 (defun file-repl (file)
   (let ((offset 0)
