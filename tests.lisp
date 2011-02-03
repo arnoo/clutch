@@ -18,8 +18,8 @@
 (load "cl-arno.lisp")
 (load "../cl-arno-test/cl-arno-test.lisp")
 
-(defpackage :cl-arno-tests (:use #:cl #:cl-arno #:cl-arno-test))
-(in-package :cl-arno-tests)
+(defpackage :clutch-tests (:use #:cl #:clutch #:cl-arno-test))
+(in-package :clutch-tests)
 
 (setf cl-arno-test:*quiet* t)
 
