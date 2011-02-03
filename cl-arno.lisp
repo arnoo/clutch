@@ -1,11 +1,11 @@
 ;
 ;   Copyright 2011 Arnaud Betremieux <arno@arnoo.net>, except where
-;   mentioned as having been copied from somebody else's code.
+;   mentioned otherwise.
 ;
-;   This program is free software: you can redistribute it and/or modify
-;   it under the terms of the GNU General Public License as published by
-;   the Free Software Foundation, either version 3 of the License, or
-;   (at your option) any later version.
+;   The program in this file is free software: you can redistribute it
+;   and/or modify it under the terms of the GNU General Public License
+;   as published by the Free Software Foundation, either version 3 of
+;   the License, or (at your option) any later version.
 ;
 ;   This program is distributed in the hope that it will be useful,
 ;   but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -16,29 +16,13 @@
 ;   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;
 
-(defpackage :on-lisp
-    (:use    #:cl)
-    (:export #:mkstr #:reread #:symb #:aif #:awhen #:aand #:awhile #:compose #:alambda #:it))
-(in-package :on-lisp)
-; Load Paul Graham's code from On Lisp in a package and export what we use.
-; The code is kept in the external file onlisp.lisp so it can be kept
-; verbatim as per PG's request at the end of the file.
-
-(defun ignore-warning (condition)
-   (declare (ignore condition))
-      (muffle-warning))
-
-(handler-bind ((warning #'ignore-warning))
-    (load "../cl-arno/onlisp.lisp"))
-
-
 (defpackage :cl-arno
-    (:use     #:cl #:on-lisp)
+    (:use     #:cl)
     (:export  #:date #:d- #:d+ #:d-delta #:ut #:miltime #:y-m-d #:date-wom #:date-week #:d= #:d/= #:d> #:d<
               #:enable-arc-lambdas #:enable-brackets #:defstruct-and-export 
-              #:in #:range #:vector-to-list* #:flatten #:pick
-              #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:alambda
-              #:lc #:uc #:str #:reread #:symb #:keyw  #:~ #:~s #:!~ #:resplit #:split #:join #:x #:lpad #:rpad #:lines
+              #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:popend
+              #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:rlambda
+              #:lc #:uc #:str #:symb #:keyw  #:~ #:~s #:!~ #:resplit #:split #:join #:x #:lpad #:rpad #:lines
               #:glob #:unglob #:glob-lines #:with-each-line #:mapflines 
               #:f= #:f/= #:with-temporary-file #:it
               #:sh #:ls #:argv #:mkhash #:keys #:rm #:mkdir 
@@ -49,12 +33,6 @@
     #-abcl (:export #:getenv))
 
 (in-package :cl-arno)
-(require 'asdf)
-(asdf:operate 'asdf:load-op 'cl-ppcre :verbose nil)
-(asdf:operate 'asdf:load-op 'ironclad :verbose nil)
-#-abcl (asdf:operate 'asdf:load-op 'drakma)
-#+sbcl (require 'sb-posix)
-#+sbcl (require 'closer-mop)
 
 (defvar +shell+ "/bin/bash")
 (defvar +months-abbr+ (list "" "Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec"))
@@ -62,153 +40,34 @@
 (defvar +days-abbr+ (list "Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))
 (defvar +days+ (list "Monday" "Tuesday" "Wednesday" "Thursday" "Friday" "Saturday" "Sunday"))
 
-(defun keyw (&rest args)
-  (values (intern (string-upcase (apply #'mkstr args)) "KEYWORD")))
+(defmacro pushend (object lst)
+  `(if ,lst
+       (nconc ,lst (list ,object))
+       (setf ,lst (list ,object))))
 
-(defun flatten (&rest x)
-  (on-lisp::flatten x))
+(defmacro popend (lst)
+  `(prog1
+     (last ,lst)
+     (nbutlast ,lst)))
+
+(defmacro rlambda (args &rest body)
+  `(labels ((recurse ,args ,@body))
+      #'recurse))
+
+(defun flatten (&rest lst)
+  "Recursively flatten a list of lists"
+  (let ((result nil))
+    (funcall (rlambda (l)
+                (if (atom l)
+                    (pushend l result)
+                    (mapcar #'recurse l)))
+             lst)
+    result))
 
 (defun str (&rest args)
-  (apply #'mkstr (remove-if-not #'identity (flatten args))))
-
-; **** Lambda expressions ala Arc by Brad Ediger ***
-; CL-USER> ([+ 1 _] 10)
-; 11
-; CL-USER> ([+ _ __] 1 2)
-; 3
-; added possibility of functional position for _ or __,
-; based on {} reader
-; CL-USER> ([_ 1 2] (list 1 2 3))
-; (2 3)
-
-(defun square-bracket-reader (stream char)
-  (declare (ignore char))
-  (let ((contents (read-delimited-list #\] stream t)))
-     `(lambda (&optional ,(intern "_") ,(intern "__"))
-              (declare (ignorable ,(intern "_") ,(intern "__")))
-              ,(if (or (eq (intern "_") (nth 0 contents))
-                       (eq (intern "__") (nth 0 contents)))
-                   `(access ,@contents)
-                   contents))))
-
-(defun enable-arc-lambdas ()
-  (set-macro-character #\[ #'square-bracket-reader)
-  (set-macro-character #\] (get-macro-character #\) nil)))
-
-(enable-arc-lambdas)
-
-; Accessor macro :
-; > (setf a (list 1 2 3))
-; > {a 2} 
-; 3
-; > (setf f (lambda (x) (+ x 2)))
-; > {f 3}
-; 5
-; > {"abcde" 2 4}
-; "cd"
-; > {"abcde" 2 -1}
-; "cde"
-; > (defstruct s a b)
-; > {(make-s :a 1 :b 2) 'a}
-; > 1
-(defun access (object start &rest args)
-  (cond ((null object) nil)
-        ((and (or (listp object) (vectorp object)) (numberp start))
-           (let ((end (and args (car args)))
-                 (len (length object)))
-             (when (or (> start len)
-                       (<= start (- len)))
-               (error "Index out of bounds"))
-             (if end
-                 (if (or (> end len)
-                         (and (minusp end)
-                              (< end (- -1 len))))
-                   (error "Second index out of bounds")
-                   (subseq object (mod start len)
-                                  (if (minusp end) (+ len 1 end)
-                                      end)))
-                 (elt object (mod start len)))))
-        ((functionp object)
-           (apply object (cons start args)))
-        ((hash-table-p object)
-           (if args (mapcar [gethash _ object] (cons start args)) (gethash start object)))
-	((typep object 'structure-object)
-     #-abcl
-	   (slot-value object (symb start))
-     #+abcl
-     (eval (list (symb (uc (str (type-of object) "-" start))) object)))
-        ((and (or (symbolp start) (stringp start)) (symbolp (elt object 0)) (evenp (length object)))
-           (getf object (symb start)))
-        ((and (or (symbolp start) (stringp start)) (consp (elt object 0)))
-           (cdr (assoc (symb start) object)))))
-
-(defun setaccess (object start &rest args)
-  (cond ((and (or (listp object) (vectorp object))
-              (numberp start))
-           (if (cdr args) 
-              (setf (subseq object start (car args)) (cadr args))
-              (setf (elt object start) (car args))))
-        ((hash-table-p object)
-           (setf (gethash start object) (car args)))
-	((typep object 'structure-object)
-	   (setf (slot-value object start) (car args)))
-  ((and (symbolp start) (symbolp (elt object 0)) (evenp (length object)))
-     (if #1=(getf object start)
-       (setf #1# (car args))
-       (nconc object (list start (car args)))))
-  ((and (symbolp start) (consp (elt object 0)))
-     (if #2=(assoc start object)
-          (rplacd #2# (car args))
-          (nconc object (list (cons start (car args))))))
-  (t (error "Type not supported by setf {}"))))
-
-(defsetf access setaccess)
-
-(defun bracket-reader (stream char)
-  (declare (ignore char))
-  `(access ,@(read-delimited-list #\} stream t)))
-
-(defun enable-brackets ()
-  (set-macro-character #\{ #'bracket-reader)
-  (set-macro-character #\} (get-macro-character #\) nil)))
-
-(enable-brackets)
-
-(defun compose-reader (stream char)
-  (declare (ignore char))
-  (prog1
-    (read-delimited-list #\) stream t)
-    (unread-char #\) stream)))
-
-(defun enable-compose ()
-  (set-macro-character #\! #'compose-reader))
-
-(defun pick (object &rest places)
-  (mapcar [_ object] places))
-
-(defun o (&rest fns)
-  (apply #'compose fns))
-
-(defun in (seq elmt)
-	"does seq contain elmt ?"
-	(not (null (position elmt seq :test #'equal))))
- 
-(defmacro aunless (test-form &rest then-forms)
-  "Executes <body> with <it> bound to <expr> if <expr> is nil"
-  `(let ((it ,test-form))
-     (unless it ,@then-forms)))
-
-(defmacro awith (expr &body body)
-  "Executes <body> with <it> bound to <expr>"
-	`(let ((it ,expr)) ,@body))
-
-(defmacro acond (&rest forms)
-  "Anaphoric cond : like a regular cond, except the result of evaluating the condition form can be accessed as <it>"
-  (let ((blockname (gensym)))
-    `(block ,blockname
-      ,@(loop for form in forms
-          collect `(awhen ,(car form) (return-from ,blockname ,(cadr form))))
-      nil)))
+  (with-output-to-string (s)
+    (apply (lambda (o) (princ o s))
+           (remove-if-not #'identity (flatten args)))))
 
 (defun lc (object)
   "Converts an object to a lowercase string"
@@ -217,6 +76,200 @@
 (defun uc (object)
   "Converts an object to an uppercase string"
   (string-upcase (str object)))
+
+(defun keyw (&rest args)
+  (values (intern (uc args)) "KEYWORD"))
+
+(defun symb (&rest args)
+  (values (intern (uc args))))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+
+   ; **** Lambda expressions à la Arc by Brad Ediger ***
+   ; CL-USER> ([+ 1 _] 10)
+   ; 11
+   ; CL-USER> ([+ _ __] 1 2)
+   ; 3
+   ; added possibility of functional position for _ or __,
+   ; based on {} reader
+   ; CL-USER> ([_ 1 2] (list 1 2 3))
+   ; (2 3)
+
+   (defun square-bracket-reader (stream char)
+     (declare (ignore char))
+     (let ((contents (read-delimited-list #\] stream t)))
+        `(lambda (&optional ,(intern "_") ,(intern "__"))
+                 (declare (ignorable ,(intern "_") ,(intern "__")))
+                 ,(if (or (eq (intern "_") (nth 0 contents))
+                          (eq (intern "__") (nth 0 contents)))
+                      `(access ,@contents)
+                      contents))))
+   
+   (defun enable-arc-lambdas ()
+     (set-macro-character #\[ #'square-bracket-reader)
+     (set-macro-character #\] (get-macro-character #\) nil)))
+
+   (enable-arc-lambdas)
+
+   ; Accessor reader macro :
+   ; > (setf a (list 1 2 3))
+   ; > {a 2} 
+   ; 3
+   ; > (setf f (lambda (x) (+ x 2)))
+   ; > {f 3}
+   ; 5
+   ; > {"abcde" 2 4}
+   ; "cd"
+   ; > {"abcde" 2 -1}
+   ; "cde"
+   ; > (defstruct s a b)
+   ; > {(make-s :a 1 :b 2) 'a}
+   ; > 1
+   (defun access (object start &rest args)
+     (cond ((null object) nil)
+           ((and (or (listp object) (vectorp object)) (numberp start))
+              (let ((end (and args (car args)))
+                    (len (length object)))
+                (when (or (> start len)
+                          (<= start (- len)))
+                  (error "Index out of bounds"))
+                (if end
+                    (if (or (> end len)
+                            (and (minusp end)
+                                 (< end (- -1 len))))
+                      (error "Second index out of bounds")
+                      (subseq object (mod start len)
+                                     (if (minusp end) (+ len 1 end)
+                                         end)))
+                    (elt object (mod start len)))))
+           ((functionp object)
+              (apply object (cons start args)))
+           ((hash-table-p object)
+              (if args (mapcar [gethash _ object] (cons start args)) (gethash start object)))
+   	((typep object 'structure-object)
+        #-abcl
+   	   (slot-value object (symb start))
+        #+abcl
+        (eval (list (symb (uc (str (type-of object) "-" start))) object)))
+           ((and (or (symbolp start) (stringp start)) (symbolp (elt object 0)) (evenp (length object)))
+              (getf object (symb start)))
+           ((and (or (symbolp start) (stringp start)) (consp (elt object 0)))
+              (cdr (assoc (symb start) object)))))
+   
+   (defun setaccess (object start &rest args)
+     (cond ((and (or (listp object) (vectorp object))
+                 (numberp start))
+              (if (cdr args) 
+                 (setf (subseq object start (car args)) (cadr args))
+                 (setf (elt object start) (car args))))
+           ((hash-table-p object)
+              (setf (gethash start object) (car args)))
+   	((typep object 'structure-object)
+   	   (setf (slot-value object start) (car args)))
+     ((and (symbolp start) (symbolp (elt object 0)) (evenp (length object)))
+        (if #1=(getf object start)
+          (setf #1# (car args))
+          (nconc object (list start (car args)))))
+     ((and (symbolp start) (consp (elt object 0)))
+        (if #2=(assoc start object)
+             (rplacd #2# (car args))
+             (nconc object (list (cons start (car args))))))
+     (t (error "Type not supported by setf {}"))))
+   
+   (defsetf access setaccess)
+
+   (defun bracket-reader (stream char)
+     (declare (ignore char))
+     `(access ,@(read-delimited-list #\} stream t)))
+   
+   (defun enable-brackets ()
+     (set-macro-character #\{ #'bracket-reader)
+     (set-macro-character #\} (get-macro-character #\) nil)))
+   
+   (enable-brackets)
+
+   ;
+   ; Function composition reader macro à la Arc:
+   ; (car!list 2) is equivalent to (car (list 2))
+   ;
+  
+   (defun compose-reader (stream char)
+     (declare (ignore char))
+     (prog1
+       (read-delimited-list #\) stream)
+       (unread-char #\) stream)))
+   
+   (defun enable-compose ()
+     (set-macro-character #\! #'compose-reader))
+   
+   (enable-compose))
+
+(defun o (&rest fns)
+  "Compose functions"
+  (if (cdr fns)
+      (lambda (&rest args) (funcall (car fns) (apply (apply #'o (cdr fns)) args)))
+      (car fns)))
+
+(defun pick (object &rest places)
+  "Select several slots from a struct, object or sequence
+   > (pick (list 1 2 3) 0 1)
+   (list 1 2)
+   > (pick (make-s :a 1 :b 2 :c 3) :a :c)
+   (list 1 3)
+   > (pick "abcd" 2 4)
+   (list #\b #\d)
+   > (pick (lambda (x) (+ x 1)) 2 4)
+   (list 3 5)
+  "
+  (mapcar [object _] places))
+
+(defun in (seq elmt)
+	"does seq contain elmt ?"
+	(not (null (position elmt seq :test #'equal))))
+
+;
+; Anaphoric macros
+;
+
+(defmacro awith (form &rest body)
+  "Executes <body> with <it> bound to <form>"
+	`(let ((it ,form)) ,@body))
+
+(defmacro aif (test then &optional else)
+  `(awith ,test
+     (if it
+         ,then
+         ,else)))
+
+(defmacro awhen (test &rest body)
+  "Executes <body> with <it> bound to result of evaluating <test> if this result is not nil"
+  `(awith ,test
+     (when it
+           ,@body)))
+ 
+(defmacro aunless (test &rest body)
+  "Executes <body> with <it> bound to result of evaluating <test> if this result is nil"
+  `(awith ,test
+     (unless it ,@body)))
+
+(defmacro awhile (test &rest body)
+  "Loops on <body> with <it> bound to result of evaluating <test> as long as this result is nil"
+  `(awith ,test
+      (loop while it
+            do (progn ,@body))))
+
+(defmacro aand (test &rest tests)
+  "n "
+  `(awith ,test
+      (and it ,@tests)))
+
+(defmacro acond (&rest forms)
+  "Anaphoric cond : like a regular cond, except the result of evaluating the condition form can be accessed as <it>"
+  (let ((blockname (gensym)))
+    `(block ,blockname
+      ,@(loop for form in forms
+          collect `(awhen ,(car form) (return-from ,blockname ,(cadr form))))
+      nil)))
 
 (defun vector-to-list* (object)
   (let ((result (list nil))
@@ -233,80 +286,85 @@
      (loop for i from 1 below (length re)
            do (if (and (char= {re i} #\/) (char/= {re (- i 1)} {"\\" 0})) 
                   (push "" result)
-                  (setf (car result) (mkstr (car result) {re i}))))
+                  (setf (car result) (str (car result) {re i}))))
      (when (< (length result) 3)
         (push (car result) result)
         (setf (cadr result) ""))
      (when (char/= {re 0} #\/)
-        (setf (car result) (mkstr {re 0} (car result))))
+        (setf (car result) (str {re 0} (car result))))
      (when (in (car result) #\i)
-        (setf (caddr result) (mkstr "(?i)" (caddr result))))
+        (setf (caddr result) (str "(?i)" (caddr result))))
      (setf (cadr result) (cl-ppcre::regex-replace-all "\\\\/" (cadr result) "/"))
-     (reverse result)))
+     (apply #'values (reverse result))))
 
-(defun ~ (re string-or-list &optional match-nb1 match-nb2)
-  "If <string-or-list> is a string:
-    returns nil if regular expression <re> does not match the string
+(defgeneric ~ (re string-or-list &optional match-nb1 match-nb2))
+
+(defmethod ~ ((re string) (string-or-list string) &optional match-nb1 match-nb2)
+   "Returns nil if regular expression <re> does not match the string
     returns the part of the string that matches <re> and all grouped matches ()
     if <match-nb1> is not nil, only match number <match-nb1> will be returned
-   if <string-or-list> is a list
-    returns the elements of that list that match <re>
     
     example : (re \"\w+(\d)\" \"ab2cc\")"
-    (declare (optimize debug))
-  (destructuring-bind (regexp subre flags) (parse-re re)
+  (multiple-value-bind (regexp subre flags) (parse-re re)
     (declare (ignorable subre))
-    (if (listp string-or-list)
-        (let ((matching (remove-if-not [cl-ppcre:scan regexp _] string-or-list)))
-             (if match-nb1
-                 (mapcar [~ re _ match-nb1 match-nb2] matching)
-                 matching))
-        (let ((match-indexes (cl-ppcre:all-matches regexp string-or-list)))
-           (when match-indexes
-             (funcall (if match-nb2
-                          [nth match-nb2 _]
-                          (if (in flags #\g)
-                                  #'identity
-                                  #'first))
-               (loop for i from 0
-                           below (if (in flags #\g) (length match-indexes) 1)
-                           by 2
-                  collect
-                  (funcall (if match-nb1 [nth match-nb1 _] #'identity)
-                    (let ((m (multiple-value-list (cl-ppcre:scan-to-strings regexp string-or-list :start {match-indexes i}))))
-                      (if {m 1} (cons (car m) (vector-to-list* (cadr m))) nil))))))))))
+    (let ((match-indexes (cl-ppcre:all-matches regexp string-or-list)))
+       (when match-indexes
+         (funcall (if match-nb2
+                      [nth match-nb2 _]
+                      (if (in flags #\g)
+                              #'identity
+                              #'first))
+           (loop for i from 0
+                       below (if (in flags #\g) (length match-indexes) 1)
+                       by 2
+              collect
+              (funcall (if match-nb1 [nth match-nb1 _] #'identity)
+                (let ((m (multiple-value-list (cl-ppcre:scan-to-strings regexp string-or-list :start {match-indexes i}))))
+                  (if {m 1} (cons (car m) (vector-to-list* (cadr m))) nil)))))))))
 
-(defun !~ (re string-or-list)
-  "If <string-or-list> is a string:
-    returns nil if <re> matches the string
-    returns the string if <re> does not match
-   if <string-or-list> is a list
-    returns the elements of that list that do not match <re>
+(defmethod ~ ((re string) (string-or-list list) &optional match-nb1 match-nb2)
+  "returns the elements of list that match <re>
     
-    example: (!~ \"\w{3}\" (list \"aaa\" \"bb\" \"ccc\"))"
-  (destructuring-bind (regexp subre flags) (parse-re re)
-    (declare (ignorable subre flags))
-    (if (listp string-or-list)
-        (remove-if [cl-ppcre::scan regexp _] string-or-list)
-        (if (not (cl-ppcre::scan regexp string-or-list))
-            string-or-list))))
+   example : (re \"\w+(\d)\" \"ab2cc\")"
+  (let ((matching (remove-if-not [cl-ppcre:scan (parse-re re) _] string-or-list)))
+       (if match-nb1
+           (mapcar [~ re _ match-nb1 match-nb2] matching)
+           matching)))
 
-(defun ~s (re string-or-list &optional match-nb)
+(defgeneric /~ (re obj))
+
+(defmethod /~ ((re string) (obj string))
+  "Returns nil if <re> matches string obj
+   returns the string if <re> does not match"
+  (if (cl-ppcre::scan (parse-re re) obj)
+      nil
+      obj))
+
+(defmethod /~ ((re string) (obj list))
+  "Returns the elements of list <obj> that do not match <re>
+    example: (/~ \"\w{3}\" (list \"aaa\" \"bb\" \"ccc\"))"
+  (remove-if [cl-ppcre::scan (parse-re re) _]
+             obj))
+
+(defgeneric ~s (re obj &optional match-nb))
+
+(defmethod ~s ((re string) (obj string) &optional match-nb)
   "Replaces all substrings that match <re> in <string> by <replacement>.
   <flags> can contain Perl regexp flags like g
   replacement can be a string which may contain the special substrings \\& for the whole match, \\` for the part of target-string before the match, \\' for the part of target-string after the match, \\N or \\{N} for the Nth register where N is a positive integer."
-  (if (listp string-or-list)
-    (mapcar [~s re _ match-nb] string-or-list)
-    (destructuring-bind (regexp subre flags) (parse-re re)
-      (let ((matches (~ re string-or-list match-nb)))
-        (values
-          (if (in flags #\g)
-            (cl-ppcre::regex-replace-all regexp string-or-list subre)
-            (cl-ppcre::regex-replace regexp string-or-list subre))
-          matches)))))
+  (multiple-value-bind (regexp subre flags) (parse-re re)
+    (let ((matches (~ re obj match-nb)))
+      (values
+        (if (in flags #\g)
+          (cl-ppcre::regex-replace-all regexp obj subre)
+          (cl-ppcre::regex-replace     regexp obj subre))
+        matches))))
 
-(defun resplit (re string)
-  (cl-ppcre:split (car (parse-re re)) string))
+(defmethod ~s ((re string) (obj list) &optional match-nb)
+  (mapcar [~s re _ match-nb] obj))
+
+(defun resplit (re str)
+  (cl-ppcre:split (parse-re re) str))
 
 (defun lines (str)
   (resplit "/\\r\\n|\\n/" str))
@@ -333,19 +391,30 @@
     (loop for i below nb do (setf s (concatenate (class-of seq) s seq)))
     (coerce s (class-of seq))))
 
-(defun range (a &optional b (step 1))
-	"Builds a range of numbers
+(defgeneric range (a &optional b step)
+	(:documentation "Builds a range of numbers or chars
    >(range 1 10)
    (1 2 3 4 5 6 7 8 9 10)
    >(range -10 -100 -30)
    (-10 -40 -70 -100)
    >(range 10)
    (0 1 2 3 4 5 6 7 8 9 10)
-  "
-	(let ((start (if b a 0)) (end (if b b a)))
+   >(range #\a #\d)
+   (#\a #\b #\c #\d)
+  "))
+
+(defmethod range ((a fixnum) &optional b (step 1))
+	(let ((start (if b a 0))
+        (end (if b b a)))
 		(if (> step 0)
 			(loop for x from start to end by step collect x)		
 			(loop for x from start downto end by (- step) collect x))))
+
+(defmethod range ((a character) &optional b (step 1))
+	(mapcar #'code-char
+          (range (char-code a)
+                 (if b (char-code b) nil)
+                 step)))
 
 (defmacro with-stream (args &rest body)
   (destructuring-bind (name path-or-stream &key binary) args
@@ -527,11 +596,10 @@
               ,@body)
            (delete-file ,filename)))))
 
-
 ;
 ; Comparison of results of function application : 
-; (defunfcom = /= < > <= >=)
-; (format nil "Compares with ~A the results of applying f to each object ~% Ex : (f~A #'sin 1 2) is equivalent to (~A (sin 1) (sin 2))" fn fn fn)
+; (f= #'sin a b) is equivalent to (= (sin a) (sin b))
+;
 
 (defmacro defunfcom (&rest fns)
   `(progn
@@ -567,7 +635,7 @@
               (error 'not-implemented :proc (list 'pipe-input prog args))))
 
 ; get-env from stumpwm (GPL) (also found in the CL cookbook) 
-#-abcl ;abcl has it predefined !
+#-abcl ;abcl has it predefined
 (defun getenv (var)
   "Return the value of the environment variable."
   #+allegro       (sys::getenv (string var))
@@ -589,7 +657,7 @@
   #+(or cmu scl) (let ((cell (assoc (string var) ext:*environment-list* :test #'equalp :key #'string)))
                     (if cell
                         (setf (cdr cell) (string val))
-                        (push (cons (intern (string var) "KEYWORD") (string val)) ext:*environment-list*)))
+                        (push (cons (keyw var) (string val)) ext:*environment-list*)))
   #+gcl          (si:setenv (string var) (string val))
   #+lispworks    (setf (lw:environment-variable (string var)) (string val))
   #+lucid        (setf (lcl:environment-variable (string var)) (string val))
@@ -679,11 +747,12 @@
 	(append
 	  `(progn
        ,(append `(defstruct ,structure ,@members))
-       ,`(export ,`(quote ,(intern (concatenate 'string "MAKE-" (symbol-name structure)))))
-       ,`(export ,`(quote ,(intern (concatenate 'string "COPY-" (symbol-name structure))))))
+       ,`(export ,`(quote ,(symb "MAKE-" (symbol-name structure))))
+       ,`(export ,`(quote ,(symb "COPY-" (symbol-name structure)))))
      (mapcar
        #'(lambda (member)
-           `(export ,`(quote ,(intern (concatenate 'string (symbol-name structure) "-" (symbol-name (if (listp member) (car member) member)))))))
+           `(export ,`(quote ,(symb (symbol-name structure) "-"
+                                    (symbol-name (if (listp member) (car member) member))))))
        members)))
 
 (defun fsave (object dir &key timestamped id id-slot)
@@ -778,7 +847,7 @@
 (defun strtout (str)
   "Converts a string to a CL universal time"
   (let ((result (sh (str "date -d \"" str "\" +%s"))))
-    (if (!~ "/^(-|)\\d+\\n$/" result)
+    (if (/~ "/^(-|)\\d+\\n$/" result)
       (error "Invalid date string : ~A" str)
       (+ (read-from-string result) 2208988800))))
 
@@ -880,7 +949,6 @@
    Warning : approximative for adding months and years"
   (d+ date (- (if (numberp duration) duration (decode-duration duration)))))
 
-; TODO: macros pour ne pas evaluer si inutile ? (en CL, les = > < sont des fonctions...)
 (defun d> (&rest dates)
   (apply #'> (mapcar #'ut dates)))
 
@@ -981,7 +1049,7 @@
                         (apply fn args))))))))
 
 (defmacro before (fn &rest body)
-  "Redefines <fn> so that <body> gets executed first each time <fn> is called. <body> can access the arguments passed to fn through variable <args>
+  "Redefines <fn> so that <body> gets executed first each time <fn> is called. <body> can access the arguments passed to fn through variable <args>. Will not work with inlined functions.
   
   Example :
     (defun a (x) (+ x 2))
@@ -995,7 +1063,7 @@
                  (apply ,sym args)))))))
 
 (defmacro after (fn &rest body)
-  "Redefines <fn> so that <body> gets executed next each time <fn> is called. <body> can access the arguments passed to fn through variable <args>
+  "Redefines <fn> so that <body> gets executed next each time <fn> is called. <body> can access the arguments passed to fn through variable <args>. Will not work with inlined functions.
   
   Example :
     (defun a (x) (+ x 2))
@@ -1009,6 +1077,9 @@
                         ,@body)))))))
 
 (defun file-repl (file)
+  "Watches file for additions, and evals the additions.
+   I use it to send forms from Vim to the REPL.
+   At the end, I have a full log of my session in the file."
   (let ((offset 0)
         (form nil))
     (loop do (sleep 1)
@@ -1019,4 +1090,3 @@
                       do (setf form (read f nil 'EOF))
                          (unless (eq form 'EOF) (eval form)))
                 (setf offset (file-position f))))))
-

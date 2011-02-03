@@ -15,11 +15,13 @@
 ;   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;
 
-(load "cl-arno.cl")
-(load "../cl-arno-test/cl-arno-test.cl")
+(load "cl-arno.lisp")
+(load "../cl-arno-test/cl-arno-test.lisp")
 
 (defpackage :cl-arno-tests (:use #:cl #:cl-arno #:cl-arno-test))
 (in-package :cl-arno-tests)
+
+(setf cl-arno-test:*quiet* t)
 
 (test-suite ("cl-arno")
   (test-suite ("join / split")
@@ -160,6 +162,33 @@
     ; :expect #\g)
     )
 
+  (test-suite ("pick")
+
+     (test "pick list"
+        (pick (list 1 2 3) 0 1)
+        :expect (list 1 2))
+
+     (test "pick struct"
+        (pick (make-s :a 1 :b 2 :c 3) :a :c)
+        :expect (list 1 3))
+     
+     (test "pick string"
+       (pick "abcd" 2 4)
+       :expect (list #\b #\d))
+
+     (test "pick lambda"
+       (pick (lambda (x) (+ x 1)) 2 4)
+       :expect (list 3 5)))
+
+  (test-suite ("compose")
+     (test "compose reader"
+       (car!list 2)
+       :expect 2)
+
+     (test "compose function"
+       (funcall (o #'floor #'+) (list 1 2.5))
+       :expect 3))
+
   (test-suite ("in, range")
       (test "In <list> <element> -> t"
         (in (list 1 2 3) 1)
@@ -180,6 +209,10 @@
       (test "Range 1..-1 by -1"
         (range 1 -1 -1)
         :expect '(1 0 -1))
+
+      (test "Range #\a..#\d"
+        (range #\a #\d)
+        :expect '(#\a #\b #\c #\d))
       )
 
   (test-suite ("regexps")
