@@ -16,13 +16,13 @@
 ;   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;
 
-(defpackage :cl-arno
+(defpackage :clutch
     (:use     #:cl)
     (:export  #:date #:d- #:d+ #:d-delta #:ut #:miltime #:y-m-d #:date-wom #:date-week #:d= #:d/= #:d> #:d<
               #:enable-arc-lambdas #:enable-brackets #:defstruct-and-export 
               #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:popend
               #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:rlambda
-              #:lc #:uc #:str #:symb #:keyw  #:~ #:~s #:!~ #:resplit #:split #:join #:x #:lpad #:rpad #:lines
+              #:lc #:uc #:str #:symb #:keyw  #:~ #:~s #:/~ #:resplit #:split #:join #:x #:lpad #:rpad #:lines
               #:glob #:unglob #:glob-lines #:with-each-line #:mapflines 
               #:f= #:f/= #:with-temporary-file #:it
               #:sh #:ls #:argv #:mkhash #:keys #:rm #:mkdir 
@@ -32,7 +32,7 @@
               #:xor)
     #-abcl (:export #:getenv))
 
-(in-package :cl-arno)
+(in-package :clutch)
 
 (defvar +shell+ "/bin/bash")
 (defvar +months-abbr+ (list "" "Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec"))
@@ -66,8 +66,8 @@
 
 (defun str (&rest args)
   (with-output-to-string (s)
-    (apply (lambda (o) (princ o s))
-           (remove-if-not #'identity (flatten args)))))
+    (mapcar (lambda (o) (princ o s))
+            (remove-if-not #'identity (flatten args)))))
 
 (defun lc (object)
   "Converts an object to a lowercase string"
@@ -78,14 +78,14 @@
   (string-upcase (str object)))
 
 (defun keyw (&rest args)
-  (values (intern (uc args)) "KEYWORD"))
+  (values (intern (uc args) "KEYWORD")))
 
 (defun symb (&rest args)
   (values (intern (uc args))))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
 
-   ; **** Lambda expressions à la Arc by Brad Ediger ***
+   ; **** Lambda expressions a la Arc by Brad Ediger ***
    ; CL-USER> ([+ 1 _] 10)
    ; 11
    ; CL-USER> ([+ _ __] 1 2)
@@ -109,8 +109,9 @@
      (set-macro-character #\[ #'square-bracket-reader)
      (set-macro-character #\] (get-macro-character #\) nil)))
 
-   (enable-arc-lambdas)
+   (enable-arc-lambdas))
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
    ; Accessor reader macro :
    ; > (setf a (list 1 2 3))
    ; > {a 2} 
@@ -125,59 +126,69 @@
    ; > (defstruct s a b)
    ; > {(make-s :a 1 :b 2) 'a}
    ; > 1
-   (defun access (object start &rest args)
-     (cond ((null object) nil)
-           ((and (or (listp object) (vectorp object)) (numberp start))
-              (let ((end (and args (car args)))
-                    (len (length object)))
-                (when (or (> start len)
-                          (<= start (- len)))
-                  (error "Index out of bounds"))
-                (if end
-                    (if (or (> end len)
-                            (and (minusp end)
-                                 (< end (- -1 len))))
-                      (error "Second index out of bounds")
-                      (subseq object (mod start len)
-                                     (if (minusp end) (+ len 1 end)
-                                         end)))
-                    (elt object (mod start len)))))
-           ((functionp object)
-              (apply object (cons start args)))
-           ((hash-table-p object)
-              (if args (mapcar [gethash _ object] (cons start args)) (gethash start object)))
-   	((typep object 'structure-object)
-        #-abcl
-   	   (slot-value object (symb start))
-        #+abcl
-        (eval (list (symb (uc (str (type-of object) "-" start))) object)))
-           ((and (or (symbolp start) (stringp start)) (symbolp (elt object 0)) (evenp (length object)))
-              (getf object (symb start)))
-           ((and (or (symbolp start) (stringp start)) (consp (elt object 0)))
-              (cdr (assoc (symb start) object)))))
-   
-   (defun setaccess (object start &rest args)
-     (cond ((and (or (listp object) (vectorp object))
-                 (numberp start))
-              (if (cdr args) 
-                 (setf (subseq object start (car args)) (cadr args))
-                 (setf (elt object start) (car args))))
-           ((hash-table-p object)
-              (setf (gethash start object) (car args)))
-   	((typep object 'structure-object)
-   	   (setf (slot-value object start) (car args)))
-     ((and (symbolp start) (symbolp (elt object 0)) (evenp (length object)))
-        (if #1=(getf object start)
-          (setf #1# (car args))
-          (nconc object (list start (car args)))))
-     ((and (symbolp start) (consp (elt object 0)))
-        (if #2=(assoc start object)
-             (rplacd #2# (car args))
-             (nconc object (list (cons start (car args))))))
-     (t (error "Type not supported by setf {}"))))
-   
-   (defsetf access setaccess)
+   (defgeneric access (object start &rest args))
 
+   (defmethod access ((object null) start &rest args)
+      nil)
+
+   (defmethod access ((object sequence) (start number) &rest args)
+      (let ((end (if args (car args) nil))
+            (len (length object)))
+        (when (or (> start len)
+                  (<= start (- len)))
+          (error "Index out of bounds"))
+        (if end
+            (if (or (> end len)
+                    (and (minusp end)
+                         (< end (- -1 len))))
+              (error "Second index out of bounds")
+              (subseq object (mod start len)
+                             (if (minusp end) (+ len 1 end)
+                                 end)))
+            (elt object (mod start len)))))
+
+   (defmethod access ((object function) start &rest args)
+      (apply object (cons start args)))
+
+   (defmethod access ((object hash-table) start &rest args)
+      (gethash start object))
+
+   (defmethod access ((object structure-class) start &rest args)
+      #-abcl
+      (slot-value object (symb start))
+      #+abcl
+      (eval (list (symb (type-of object) "-" start) object))) ;TODO: access slot directly
+   
+   (defgeneric setaccess (object start &rest args))
+
+   (defmethod setaccess ((object sequence) start &rest args)
+      (let ((end (if args (car args) nil))
+                  (len (length object)))
+              (when (or (> start len)
+                        (<= start (- len)))
+                (error "Index out of bounds"))
+              (if (cdr args)
+                  (if (or (> end len)
+                          (and (minusp end)
+                               (< end (- -1 len))))
+                    (error "Second index out of bounds")
+                    (setf (subseq object
+                                  (mod start len)
+                                  (if (minusp end)
+                                      (+ len 1 end)
+                                      end))
+                          (cadr args)))
+                  (setf (elt object (mod start len)) (car args)))))
+
+   (defmethod setaccess ((object hash-table) start &rest args)
+      (setf (gethash start object) (car args)))
+
+   (defmethod setaccess ((object structure-class) start &rest args)
+   	   (setf (slot-value object start) (car args)))
+
+   (defsetf access setaccess))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
    (defun bracket-reader (stream char)
      (declare (ignore char))
      `(access ,@(read-delimited-list #\} stream t)))
@@ -186,10 +197,11 @@
      (set-macro-character #\{ #'bracket-reader)
      (set-macro-character #\} (get-macro-character #\) nil)))
    
-   (enable-brackets)
+   (enable-brackets))
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
    ;
-   ; Function composition reader macro à la Arc:
+   ; Function composition reader macro a la Arc:
    ; (car!list 2) is equivalent to (car (list 2))
    ;
   
@@ -216,12 +228,13 @@
    (list 1 2)
    > (pick (make-s :a 1 :b 2 :c 3) :a :c)
    (list 1 3)
-   > (pick "abcd" 2 4)
+   > (pick \"abcd\" 2 4)
    (list #\b #\d)
    > (pick (lambda (x) (+ x 1)) 2 4)
    (list 3 5)
   "
-  (mapcar [object _] places))
+  (mapcar (lambda (x) (access object x))
+          places))
 
 (defun in (seq elmt)
 	"does seq contain elmt ?"
@@ -604,7 +617,7 @@
 (defmacro defunfcom (&rest fns)
   `(progn
       ,@(loop for fn in fns
-              collect `(defun ,(symb "F" fn) (f &rest objects)
+              collect `(defun ,(intern (concatenate 'string "F" (symbol-name fn))) (f &rest objects)
                           ,(format nil "Compares with ~A the results of applying f to each object ~% Ex : (f~A #'sin 1 2) is equivalent to (~A (sin 1) (sin 2))" fn fn fn)
                           (apply (function ,fn) (mapcar f objects))))))
 
@@ -747,12 +760,12 @@
 	(append
 	  `(progn
        ,(append `(defstruct ,structure ,@members))
-       ,`(export ,`(quote ,(symb "MAKE-" (symbol-name structure))))
-       ,`(export ,`(quote ,(symb "COPY-" (symbol-name structure)))))
+       ,`(export ,`(quote ,(intern (concatenate 'string "MAKE-" (symbol-name structure)))))
+       ,`(export ,`(quote ,(intern (concatenate 'string "COPY-" (symbol-name structure))))))
      (mapcar
        #'(lambda (member)
-           `(export ,`(quote ,(symb (symbol-name structure) "-"
-                                    (symbol-name (if (listp member) (car member) member))))))
+           `(export ,`(quote ,(intern (concatenate 'string (symbol-name structure) "-"
+                                                           (symbol-name (if (listp member) (car member) member)))))))
        members)))
 
 (defun fsave (object dir &key timestamped id id-slot)
@@ -764,7 +777,7 @@
       (progn
         (unless id (setf id (aif (and id-slot {object id-slot})
                                  it
-                                 (let ((items (~ "/^.*\\/(.*)(###|$)/" (!~ "/\\/\\.[^\\/]*$/" (ls dir)) 1)))
+                                 (let ((items (~ "/^.*\\/(.*)(###|$)/" (/~ "/\\/\\.[^\\/]*$/" (ls dir)) 1)))
                                     (if items
                                         (if (= (length (~ "/^\\d+$/" items)) (length items))
                                             (+ 1 (apply #'max (mapcar #'read-from-string items)))
