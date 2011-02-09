@@ -63,13 +63,66 @@
     :expect "1232"))
 
 (test-suite ("anaphoric macros")
-  (test "Aif 1"
+  (test "Awith"
+    (awith 22 (+ 1 it))
+    :expect	23)
+
+  (test "Aif"
     (aif t it)
     :expect	t)
 
   (test "Aif 2"
     (aif nil 2 it)
-    :expect	nil))
+    :expect	nil)
+
+  (test "Awhen"
+    (let ((a 1))
+      (awhen nil (incf a) (incf a))
+      a)
+    :expect	1)
+
+  (test "Awhen"
+    (let ((a 1))
+      (awhen 2 (incf a) (incf a))
+      a)
+    :expect	3)
+
+  (test "Aunless"
+    (let ((a 1))
+      (aunless nil (incf a) (incf a))
+      a)
+    :expect	3)
+
+  (test "Aunless"
+    (let ((a 1))
+      (aunless 2 (incf a) (incf a))
+      a)
+    :expect	1)
+
+  (test "Awhile"
+    (let ((a 1)
+          (c t))
+      (awhile c
+        (incf a)
+        (when (> a 3) (setf c (not it))))
+      a)
+    :expect	4)
+
+  (test "Aand"
+    (aand 2 (+ it 3))
+    :expect	5)
+
+  (test "Aand 2"
+    (aand nil 2)
+    :expect	nil)
+
+  (test "Acond"
+    (acond 
+      (nil 22)
+      (23 it)
+      (t 24))
+    :expect	23)
+  )
 
 (test-suite ("Reader macros")
   (test "Square bracket reader [+ 1 _]"
@@ -134,15 +187,15 @@
 
   (test "Curly brackets setter list 2"
       (let ((alist (list 1 2 3 4)))
-         (setf {alist 1 2} (list 5 6))
+         (setf {alist 1 3} (list 5 6))
          alist)
       :expect '(1 5 6 4))
 
   (test "Curly brackets setter string"
     (let ((astring "abc"))
       (setf {astring 1} #\g)
-      (elt astring 1))                           
-   :expect #\g)
+      astring)                           
+   :expect "agc")
 
   (test "Curly brackets setter struct"
     (let ((s (make-test-struct :a "1" :b 2)))
@@ -157,7 +210,7 @@
       :expect (list 1 2))
 
    (test "pick struct"
-      (pick (make-test-struct :a "1" :b 2 :c (list 1 2)) :a :c)
+      (pick (make-test-struct :a "1" :b 2 :c (list 1 2)) 'a 'c)
       :expect (list "1" (list 1 2)))
    
    (test "pick string"
@@ -700,3 +753,28 @@
       *a*
       :expect 4)
   )
+
+  (test-suite ("uuid")
+
+    (let* ((hexd "[0-9A-Z]")
+           (ure (str "/" hexd "{8}-" hexd "{4}-" hexd "{4}-" hexd "{4}-" hexd "{12}" "/")))
+
+      (test "uuid default"
+         (? (~ ure (uuid)))
+         :expect t)
+
+      (test "uuid v1"
+         (? (~ ure (uuid :v 1)))
+         :expect t)
+
+      (test "uuid v3"
+         (? (~ ure (uuid :v 3 :ns 'URL :name "name")))
+         :expect t)
+
+      (test "uuid v4"
+         (? (~ ure (uuid :v 4)))
+         :expect t)
+
+      (test "uuid v5"
+         (? (~ ure (uuid :v 5 :ns 'OID :name "name")))
+         :expect t)))

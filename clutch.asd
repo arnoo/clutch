@@ -31,6 +31,7 @@
   :components ((:file "clutch"))
   :depends-on (:cl-ppcre
                :ironclad
+               :uuid
                #-abcl :drakma
                #+sbcl :sb-posix
                #+sbcl :closer-mop)

@@ -1,4 +1,4 @@
-This is the utility library I wrote as I was learning Common Lisp. I use it in all my projects, and it evolves as I require new utilities.
+This is the utility library I wrote as I was learning Common Lisp. It evolves as I require new utilities.
 
 Most functions should work pretty well on SBCL and ABCL, which are the two implementations I use regularly. There is code specific to other implementations, but it has never been tested.
 

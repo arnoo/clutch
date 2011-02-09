@@ -18,7 +18,8 @@
 
 (defpackage :clutch
     (:use     #:cl)
-    (:export  #:date #:d- #:d+ #:d-delta #:ut #:miltime #:y-m-d #:date-wom #:date-week #:d= #:d/= #:d> #:d<
+    (:export  #:date #:d- #:d+ #:d-delta #:ut #:miltime #:y-m-d #:date-wom #:date-week
+              #:d= #:d/= #:d> #:d< #:d<= #:d>=
               #:enable-arc-lambdas #:enable-brackets #:defstruct-and-export 
               #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:popend
               #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:rlambda
@@ -27,9 +28,9 @@
               #:f= #:f/= #:with-temporary-file #:it
               #:sh #:ls #:argv #:mkhash #:keys #:rm #:mkdir 
               #:fload #:fsave #:fselect #:fselect1
-              #:md5 #:sha1 #:sha256
+              #:md5 #:sha1 #:sha256 #:uuid
               #:memoize #:memoize-to-disk #:before #:after #:o 
-              #:xor)
+              #:xor #:?)
     #-abcl (:export #:getenv))
 
 (in-package :clutch)
@@ -65,6 +66,7 @@
     result))
 
 (defun str (&rest args)
+  "Converts <args> to a string"
   (with-output-to-string (s)
     (mapcar (lambda (o) (princ o s))
             (remove-if-not #'identity (flatten args)))))
@@ -78,9 +80,11 @@
   (string-upcase (str object)))
 
 (defun keyw (&rest args)
+  "Converts <args> to a keyword"
   (values (intern (uc args) "KEYWORD")))
 
 (defun symb (&rest args)
+  "Converts <args> to a symbol"
   (values (intern (uc args))))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -126,6 +130,7 @@
    ; > (defstruct s a b)
    ; > {(make-s :a 1 :b 2) 'a}
    ; > 1
+
    (defgeneric access (object start &rest args))
 
    (defmethod access ((object null) start &rest args)
@@ -153,42 +158,38 @@
    (defmethod access ((object hash-table) start &rest args)
       (gethash start object))
 
-   (defmethod access ((object structure-class) start &rest args)
+   (defmethod access ((object structure-object) start &rest args)
       #-abcl
       (slot-value object (symb start))
       #+abcl
       (eval (list (symb (type-of object) "-" start) object))) ;TODO: access slot directly
    
-   (defgeneric setaccess (object start &rest args))
+   (defmacro setaccess (object start &rest args)
+      `(cond ((null ,object) nil)
+             ((and (or (listp ,object) (vectorp ,object)) (numberp ,start))
+                (let ((end ,(and (cdr args) (car args)))
+                      (len (length ,object)))
+                   (when (or (> ,start len)
+                             (<= ,start (- len)))
+                        (error "Index out of bounds"))
+                   (if end
+                      (if (or (> end len)
+                              (and (minusp end)
+                                   (< end (- -1 len))))
+                          (error "Second index out of bounds")
+                          (setf (subseq ,object (mod ,start len)
+                                        (if (minusp end) (+ len 1 end)
+                                            end))
+                                ,(cadr args)))
+                      (setf (elt ,object (mod ,start len)) ,(car args)))))
+            ((hash-table-p ,object)
+               (setf (gethash ,start ,object) ,(car args)))
+            ((typep ,object 'structure-object)
+               #-abcl
+               (setf (slot-value ,object (symb ,start)) ,(car args)))))
 
-   (defmethod setaccess ((object sequence) start &rest args)
-      (let ((end (if args (car args) nil))
-                  (len (length object)))
-              (when (or (> start len)
-                        (<= start (- len)))
-                (error "Index out of bounds"))
-              (if (cdr args)
-                  (if (or (> end len)
-                          (and (minusp end)
-                               (< end (- -1 len))))
-                    (error "Second index out of bounds")
-                    (setf (subseq object
-                                  (mod start len)
-                                  (if (minusp end)
-                                      (+ len 1 end)
-                                      end))
-                          (cadr args)))
-                  (setf (elt object (mod start len)) (car args)))))
+   (defsetf access setaccess)
 
-   (defmethod setaccess ((object hash-table) start &rest args)
-      (setf (gethash start object) (car args)))
-
-   (defmethod setaccess ((object structure-class) start &rest args)
-   	   (setf (slot-value object start) (car args)))
-
-   (defsetf access setaccess))
-
-(eval-when (:compile-toplevel :load-toplevel :execute)
    (defun bracket-reader (stream char)
      (declare (ignore char))
      `(access ,@(read-delimited-list #\} stream t)))
@@ -266,10 +267,15 @@
      (unless it ,@body)))
 
 (defmacro awhile (test &rest body)
-  "Loops on <body> with <it> bound to result of evaluating <test> as long as this result is nil"
-  `(awith ,test
-      (loop while it
-            do (progn ,@body))))
+  "Loops on <body> with <it> bound to result of evaluating <test> as long as this result is not nil"
+  `(loop for it = ,test
+         while it
+         do (progn ,@body)))
+
+(defmacro while (test &rest body)
+  "Loops on <body> as long as <test> does not evaluates to nil"
+  `(loop while ,test
+         do (progn ,@body)))
 
 (defmacro aand (test &rest tests)
   "n "
@@ -771,7 +777,8 @@
 (defun fsave (object dir &key timestamped id id-slot)
   (let ((lock (str dir "/.cl-arno_lock")))
     (unless timestamped
-      (loop while (ls lock) do (sleep 0.1))
+      (while (ls lock)
+        (sleep 0.1))
       (unglob lock ""))
     (unwind-protect
       (progn
@@ -781,9 +788,9 @@
                                     (if items
                                         (if (= (length (~ "/^\\d+$/" items)) (length items))
                                             (+ 1 (apply #'max (mapcar #'read-from-string items)))
-                                            (let ((i (str (gensym)))) ; TODO: this is very stupid (don't use as is)
-                                                 (loop while (ls i) do (setf i (str (gensym))))
-                                                 i))
+                                            (loop for u = (uuid)
+                                                  while (ls u)
+                                                  return u))
                                         0)))))
         (when id-slot (setf {object id-slot} id))
         (let ((file (str dir "/" id (if timestamped
@@ -805,7 +812,8 @@
 (defun fselect (from &key key value limit)
   (let ((lock (str from "/.cl-arno_lock"))
         (loaded 0))
-      (loop while (ls lock) do (sleep 0.01))
+      (while (ls lock)
+        (sleep 0.01))
   (remove-if-not [and _ (equal {_ key} value)]
      (mapcar [if (or (not limit) (< loaded limit))
                  (progn
@@ -837,6 +845,22 @@
 (defun md5 (obj)
   (ironclad-digest obj :md5))
 
+(defun uuid-ns (ns)
+  (case (keyw ns)
+    (:DNS uuid:+namespace-dns+)
+    (:URL uuid:+namespace-url+)
+    (:OID uuid:+namespace-oid+)
+    (:x500 uuid:+namespace-x500+)))
+
+(defun uuid (&key ns name (v 4))
+  "Generates a UUID with algorithm version <v> (4=random by default) of RFC 4122, with name <name> in namespace <ns>."
+  (str (case v
+         (1 (uuid:make-v1-uuid))                    ; time based
+         (3 (uuid:make-v3-uuid (uuid-ns ns) name))  ; name based MD5
+         (4 (uuid:make-v4-uuid))                    ; random
+         (5 (uuid:make-v5-uuid (uuid-ns ns) name))  ; name based SHA1
+         (otherwise (error "Incorrect UUID version : ~A" v)))))
+
 (defstruct-and-export date
   s m h
   dow day month year
@@ -858,13 +882,14 @@
   (sh (str "date -d '" (date-rfc-2822 date) "' +'" format "'")))
 
 (defun strtout (str)
-  "Converts a string to a CL universal time"
+  "Converts a string to a Common Lisp universal-time"
   (let ((result (sh (str "date -d \"" str "\" +%s"))))
     (if (/~ "/^(-|)\\d+\\n$/" result)
       (error "Invalid date string : ~A" str)
       (+ (read-from-string result) 2208988800))))
 
 (defun date (&key ut miltime str zone)
+  "Returns a date structure based on either Common Lisp universal-time <ut>, 'military' (i.e. 1234 for today 12:34) time <miltime>, or string <str>, in timezone <zone>."
   (multiple-value-bind (us um uh uday umonth uyear udow udaylight-p uzone)
                        (decode-universal-time 
                           (if (or ut str miltime)
@@ -888,6 +913,7 @@
   )))
 
 (defun ut (&optional str-or-date)
+  "Returns the current Common Lisp universal-time, or if <str-or-date> is specified, the universal-time described by that string or date structure"
   (declare (optimize debug))
   (if str-or-date
     (if (stringp str-or-date)
@@ -904,6 +930,7 @@
     (get-universal-time)))
 
 (defun d-delta (date1 date2)
+  "Delta in seconds between <date1> and <date2>"
   (- (ut date1) (ut date2)))
 
 (defun decode-duration (duration)
@@ -963,15 +990,27 @@
   (d+ date (- (if (numberp duration) duration (decode-duration duration)))))
 
 (defun d> (&rest dates)
+  "Are <dates> in strict reverse order ?"
   (apply #'> (mapcar #'ut dates)))
 
 (defun d< (&rest dates)
+  "Are <dates> in strict order ?"
   (apply #'< (mapcar #'ut dates)))
 
+(defun d>= (&rest dates)
+  "Are <dates> in reverse order ?"
+  (apply #'>= (mapcar #'ut dates)))
+
+(defun d<= (&rest dates)
+  "Are <dates> in order ?"
+  (apply #'<= (mapcar #'ut dates)))
+
 (defun d= (&rest dates)
+  "Are <dates> identical ?"
   (apply #'= (mapcar #'ut dates)))
 
 (defun d/= (&rest dates)
+  "Are <dates> different ?"
   (apply #'/= (mapcar #'ut dates)))
 
 (defun date-week (date)
@@ -993,7 +1032,7 @@
   (date :ut (ut date) :zone zone))
 
 (defun y-m-d (date)
-  "Date in format 2003-12-22"
+  "Date in format YYYY-MM-DD"
   (str (date-year date) "-" (date-month date) "-" (date-day date)))
 
 (defmacro xor (&rest args)
@@ -1008,6 +1047,7 @@
     result)))
 
 (defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last expire)
+  "Returns a disk memoized version of function <fn>. If <remember-last> is specified, it will limit the number of remembered results. If <expire> is specified, it will limit the number of seconds a result is remembered for. <force-reset> causes results from previous sessions to be discarded. <prefix> can be used to customize the prefix of cache files, and <dir> to change the directory of these files."
   (unless prefix
     (setf prefix (str "cl-arno-mem-" (~ "/\{([A-E0-9]+)\}/" (str fn) 1)))
     (setf force-reset t))
@@ -1018,7 +1058,8 @@
                       prefix
                       "#" (sha256 (str args))))
            (lock (str file ".lock")))
-       (loop while (ls lock) do (sleep 0.01))
+       (while (ls lock)
+         (sleep 0.01))
        (when expire
          (loop for f in (~ (str "/\\/" prefix "#[^\\/]+/") (ls dir))
            do (when (> (- time (file-write-date f)) expire)
@@ -1038,6 +1079,7 @@
               it)))))
 
 (defun memoize (fn &key remember-last expire)
+  "Returns a memoized version of function <fn>. If <remember-last> is specified, it will limit the number of remembered results. If <expire> is specified, it will limit the number of seconds a result is remembered for."
   (let ((cache (mkhash))
         (calls (mkhash)))
      #'(lambda (&rest args)
@@ -1055,9 +1097,12 @@
                 (progn
                   (when (and remember-last
                              (>= (hash-table-count cache) remember-last))
-                     (awith (first (sort (keys calls) [> {calls _} {calls __}]))
+                     (awith (first (sort (keys cache) [> {calls _} {calls __}]))
+                       (print (keys calls)) (print (keys cache))
                        (remhash it calls)
-                       (remhash it cache)))
+                       (remhash it cache)
+                       (print (keys calls)) (print (keys cache))
+                       ))
                   (setf {cache args}
                         (apply fn args))))))))
 
@@ -1103,3 +1148,7 @@
                       do (setf form (read f nil 'EOF))
                          (unless (eq form 'EOF) (eval form)))
                 (setf offset (file-position f))))))
+
+(defun ? (test)
+  "Returns nil if <test> evaluates to nil, t otherwise"
+  (if test t nil))
