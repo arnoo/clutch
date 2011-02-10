@@ -24,7 +24,7 @@
               #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:popend
               #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:rlambda
               #:lc #:uc #:str #:symb #:keyw  #:~ #:~s #:/~ #:resplit #:split #:join #:x #:lpad #:rpad #:lines
-              #:glob #:unglob #:glob-lines #:with-each-line #:mapflines 
+              #:gulp #:ungulp #:gulp-lines #:with-each-line #:mapflines 
               #:f= #:f/= #:with-temporary-file #:it
               #:sh #:ls #:argv #:mkhash #:keys #:rm #:mkdir 
               #:fload #:fsave #:fselect #:fselect1
@@ -88,34 +88,6 @@
   (values (intern (uc args))))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-
-   ; **** Lambda expressions a la Arc by Brad Ediger ***
-   ; CL-USER> ([+ 1 _] 10)
-   ; 11
-   ; CL-USER> ([+ _ __] 1 2)
-   ; 3
-   ; added possibility of functional position for _ or __,
-   ; based on {} reader
-   ; CL-USER> ([_ 1 2] (list 1 2 3))
-   ; (2 3)
-
-   (defun square-bracket-reader (stream char)
-     (declare (ignore char))
-     (let ((contents (read-delimited-list #\] stream t)))
-        `(lambda (&optional ,(intern "_") ,(intern "__"))
-                 (declare (ignorable ,(intern "_") ,(intern "__")))
-                 ,(if (or (eq (intern "_") (nth 0 contents))
-                          (eq (intern "__") (nth 0 contents)))
-                      `(access ,@contents)
-                      contents))))
-   
-   (defun enable-arc-lambdas ()
-     (set-macro-character #\[ #'square-bracket-reader)
-     (set-macro-character #\] (get-macro-character #\) nil)))
-
-   (enable-arc-lambdas))
-
-(eval-when (:compile-toplevel :load-toplevel :execute)
    ; Accessor reader macro :
    ; > (setf a (list 1 2 3))
    ; > {a 2} 
@@ -159,10 +131,7 @@
       (gethash start object))
 
    (defmethod access ((object structure-object) start &rest args)
-      #-abcl
-      (slot-value object (symb start))
-      #+abcl
-      (eval (list (symb (type-of object) "-" start) object))) ;TODO: access slot directly
+      (slot-value object (symb start)))
    
    (defmacro setaccess (object start &rest args)
       `(cond ((null ,object) nil)
@@ -185,7 +154,6 @@
             ((hash-table-p ,object)
                (setf (gethash ,start ,object) ,(car args)))
             ((typep ,object 'structure-object)
-               #-abcl
                (setf (slot-value ,object (symb ,start)) ,(car args)))))
 
    (defsetf access setaccess)
@@ -201,9 +169,37 @@
    (enable-brackets))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
+
+   ; **** Lambda expressions a la Arc by Brad Ediger ***
+   ; CL-USER> ([+ 1 _] 10)
+   ; 11
+   ; CL-USER> ([+ _ __] 1 2)
+   ; 3
+   ; with added possibility of functional position for _ or __,
+   ; based on {} reader
+   ; CL-USER> ([_ 1 2] (list 1 2 3))
+   ; (2 3)
+
+   (defun square-bracket-reader (stream char)
+     (declare (ignore char))
+     (let ((contents (read-delimited-list #\] stream t)))
+        `(lambda (&optional ,(intern "_") ,(intern "__"))
+                 (declare (ignorable ,(intern "_") ,(intern "__")))
+                 ,(if (or (eq (intern "_") (nth 0 contents))
+                          (eq (intern "__") (nth 0 contents)))
+                      `(access ,@contents)
+                      contents))))
+   
+   (defun enable-arc-lambdas ()
+     (set-macro-character #\[ #'square-bracket-reader)
+     (set-macro-character #\] (get-macro-character #\) nil)))
+
+   (enable-arc-lambdas))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
    ;
    ; Function composition reader macro a la Arc:
-   ; (car!list 2) is equivalent to (car (list 2))
+   ; (car!list 2 3) is equivalent to (car (list 2 3))
    ;
   
    (defun compose-reader (stream char)
@@ -216,6 +212,14 @@
      (set-macro-character #\! #'compose-reader))
    
    (enable-compose))
+
+(defun split (sep seq)
+  (if (= (length sep) 0)
+      (coerce seq 'list)
+      (loop for start = 0 then (+ end (length sep))
+            for end = (search sep seq :start2 start)
+            collecting {seq start (or end (length seq))}
+            while end)))
 
 (defun o (&rest fns)
   "Compose functions"
@@ -388,14 +392,6 @@
 (defun lines (str)
   (resplit "/\\r\\n|\\n/" str))
 
-(defun split (sep seq)
-  (if (= (length sep) 0)
-      (coerce seq 'list)
-      (loop for start = 0 then (+ end (length sep))
-            for end = (search sep seq :start2 start)
-            collecting {seq start (or end (length seq))}
-            while end)))
-
 (defun join (join-seq &rest seq-lists)
   (awith (flatten seq-lists)
     (if (cdr it)
@@ -466,12 +462,12 @@
                (string-equal {path-or-stream 0 6} "http://")))))
   
 
-(defun glob (path-or-stream &key binary (offset 0) limit)
-  "Globs the whole provided file, url or stream into a string or into a byte array if <binary>,
+(defun gulp (path-or-stream &key binary (offset 0) limit)
+  "gulps the whole provided file, url or stream into a string or into a byte array if <binary>,
   starting at offset. If offset is negative, start from end-offset. Read at most limit characters.
-  (glob \"http://www.google.com\")
-  (glob \"/etc/hosts\" :offset 10)
-  (glob stream :offset 2 :limit 20)
+  (gulp \"http://www.google.com\")
+  (gulp \"/etc/hosts\" :offset 10)
+  (gulp stream :offset 2 :limit 20)
    "
   (when (and limit (< limit 0))
     (error "Limit must be a positive integer (number of lines)"))
@@ -515,7 +511,7 @@
                              {seq (- -1 offset) -1})))
              (aif limit {seq 0 limit} seq)))))
 
-(defun unglob (filename object &key if-exists binary readable)
+(defun ungulp (filename object &key if-exists binary readable)
   "Print <object> into <filename>"
   (progn
     (with-open-file (stream filename
@@ -563,7 +559,7 @@
                      (< offset 0))
             ; we have to read the whole thing
             (let ((done-lines 0))
-              (loop for it in {(resplit "/\\n/" (glob ,path-or-stream)) offset (+ offset limit)}
+              (loop for it in {(resplit "/\\n/" (gulp ,path-or-stream)) offset (+ offset limit)}
                     do ,@body
                        (incf done-lines))
               (return-from read-loop done-lines)))
@@ -593,8 +589,8 @@
        (with-each-fline (s :offset ,offset :limit ,limit)
          ,@body))))
 
-(defun glob-lines (path-or-stream &key (offset 0) limit)
-  "Globs the whole provided file, url or stream into an array of its lines."
+(defun gulp-lines (path-or-stream &key (offset 0) limit)
+  "gulps the whole provided file, url or stream into an array of its lines."
   (let ((lines nil))
     (with-each-fline (path-or-stream :offset offset :limit limit)
       (nconc lines (list it)))
@@ -618,6 +614,9 @@
 ;
 ; Comparison of results of function application : 
 ; (f= #'sin a b) is equivalent to (= (sin a) (sin b))
+; Something generic like (=^sin a b) could be nicer, although
+; I don't think it can be transformed to (= (sin a) (sin b)) using
+; reader macros.
 ;
 
 (defmacro defunfcom (&rest fns)
@@ -639,13 +638,14 @@
   (str (x (str with) (max 0 (- chars (length string)))) string))
     
 ; sh based on run-prog-collect-output from stumpwm (GPL)
+; note : it might be nice to return (values stdin stdout) ?
 (defun sh (command)
   "run a command and read its output."
   (with-input-from-string (ar command)
     #+allegro (with-output-to-string (s) (excl:run-shell-command +shell+ :output s :wait t :input ar))
     #+clisp   (with-output-to-string (s)
                 (let ((out (ext:run-program "/bin/sh" :arguments () :input ar :wait t :output :stream)))
-                  (glob out)))
+                  (gulp out)))
     #+cmu     (with-output-to-string (s) (ext:run-program +shell+ () :input ar :output s :error s :wait t))
     #+sbcl    (with-output-to-string (s) (sb-ext:run-program +shell+ () :input ar :output s :error s :wait t))
     #+ccl     (with-output-to-string (s) (ccl:run-program +shell+ () :wait t :output s :error t :input ar))
@@ -754,7 +754,7 @@
         (t nil)))
 
 (defun kvalues (o)
-  (mapcar [_ o] (keys o)))
+  (apply #'pick (append (list o) (keys o))))
 
 #-abcl
 (defun slot-type (class slot)
@@ -779,7 +779,7 @@
     (unless timestamped
       (while (ls lock)
         (sleep 0.1))
-      (unglob lock ""))
+      (ungulp lock ""))
     (unwind-protect
       (progn
         (unless id (setf id (aif (and id-slot {object id-slot})
@@ -798,7 +798,7 @@
                                                         (append '(nil "~4,'0D~2,'0D~2,'0D~2,'0D~2,'0D~2,'0D")
                                                                  (pick (multiple-value-list (get-decoded-time))
                                                                        5 4 3 2 1 0))))))))
-          (unglob file object :readable t :if-exists :supersede)))
+          (ungulp file object :readable t :if-exists :supersede)))
       (unless timestamped
         (rm lock)))
       id))
@@ -807,7 +807,7 @@
   (unless version
     (awhen (~ (str "/\\/" id "###(\\d+)$/") (ls dir) 1)
       (setf version (apply #'max (mapcar #'read-from-string it)))))
-  (read-from-string (glob (str dir "/" id (aif version (str "###" it))))))
+  (read-from-string (gulp (str dir "/" id (aif version (str "###" it))))))
 
 (defun fselect (from &key key value limit)
   (let ((lock (str from "/.cl-arno_lock"))
@@ -1047,7 +1047,10 @@
     result)))
 
 (defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last expire)
-  "Returns a disk memoized version of function <fn>. If <remember-last> is specified, it will limit the number of remembered results. If <expire> is specified, it will limit the number of seconds a result is remembered for. <force-reset> causes results from previous sessions to be discarded. <prefix> can be used to customize the prefix of cache files, and <dir> to change the directory of these files."
+  "Returns a disk memoized version of function <fn>. If <remember-last> is specified, it will limit the number of remembered results. If <expire> is specified, it will limit the number of seconds a result is remembered for. <force-reset> causes results from previous sessions to be discarded. <prefix> can be used to customize the prefix of cache files, and <dir> to change the directory of these files.
+  
+  Warning : remember-last uses file write dates to determine call order. If the function takes less than a second to return, the order of forgotting calls is not garanteed.
+  "
   (unless prefix
     (setf prefix (str "cl-arno-mem-" (~ "/\{([A-E0-9]+)\}/" (str fn) 1)))
     (setf force-reset t))
@@ -1065,46 +1068,48 @@
            do (when (> (- time (file-write-date f)) expire)
                 (rm f))))
        (if (ls file)
-           (read-from-string (glob file))
+           (read-from-string (gulp file))
            (awith (apply fn args)
-              (unglob lock "")
+              (ungulp lock "")
               (unwind-protect
                 (progn
                   (when remember-last
                     (awith (~ (str "/\\/" prefix "#[^\\/]+/") (ls dir))
                       (when (>= (length it) remember-last)
                          (rm (first (sort it [> (file-write-date _) (file-write-date __)]))))))
-                  (unglob file it :readable t))
+                  (ungulp file it :readable t))
                 (rm lock))
               it)))))
 
 (defun memoize (fn &key remember-last expire)
   "Returns a memoized version of function <fn>. If <remember-last> is specified, it will limit the number of remembered results. If <expire> is specified, it will limit the number of seconds a result is remembered for."
   (let ((cache (mkhash))
-        (calls (mkhash)))
+        (cycle 0))
      #'(lambda (&rest args)
-          (when expire
-                (loop for time = (ut)
-                      for call in (keys calls)
-                      do (when (> (- time {calls call}) expire)
-                            (remhash call cache)
-                            (remhash call calls))))
-          (when (or remember-last expire)
-            (setf {calls args} (ut)))
-          (multiple-value-bind (val hit) (gethash args cache)
-            (if hit
-                val
-                (progn
-                  (when (and remember-last
-                             (>= (hash-table-count cache) remember-last))
-                     (awith (first (sort (keys cache) [> {calls _} {calls __}]))
-                       (print (keys calls)) (print (keys cache))
-                       (remhash it calls)
-                       (remhash it cache)
-                       (print (keys calls)) (print (keys cache))
-                       ))
-                  (setf {cache args}
-                        (apply fn args))))))))
+          (let ((utc (ut)))
+            (when expire
+               (loop with time = utc
+                     for call in (keys cache)
+                     do (when (> (cadr {cache call}) expire)
+                           (remhash call cache))))
+            (when remember-last
+               (incf cycle)
+               (when (= cycle most-positive-fixnum) (setf cycle 0)))
+            (multiple-value-bind (val hit) (gethash args cache)
+              (if hit
+                  (progn
+                    (when (or remember-last expire)
+                       (setf {cache args} (list (car val) utc cycle)))
+                    (caddr val))
+                  (progn
+                    (when (and remember-last
+                               (>= (hash-table-count cache) remember-last))
+                       (awith (first (sort (keys cache) [or (> (cadr {cache _}) (cadr {cache __}))
+                                                            (> (caddr {cache _}) (caddr {cache __}))]))
+                         (remhash it cache)))
+                    (apply #'values 
+                      (setf {cache args}
+                            (list (apply fn args) (ut) cycle))))))))))
 
 (defmacro before (fn &rest body)
   "Redefines <fn> so that <body> gets executed first each time <fn> is called. <body> can access the arguments passed to fn through variable <args>. Will not work with inlined functions.

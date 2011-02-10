@@ -198,10 +198,10 @@
    :expect "agc")
 
   (test "Curly brackets setter struct"
-    (let ((s (make-test-struct :a "1" :b 2)))
-       (setf {s 'a} 5)
+    (let ((s (make-test-struct :a "x" :b 2)))
+       (setf {s 'a} "y")
        (test-struct-a s))
-    :expect 5)
+    :expect "y")
   )
 
 (test-suite ("pick")
@@ -261,7 +261,7 @@
       (~ "/\\w/" "bob")
       :expect '("b"))
 
-    (test "Regexp global"
+    (test "Regexp gulpal"
       (~ "/\\w/g" "bob")
       :expect '(("b") ("o") ("b")))
 
@@ -277,7 +277,7 @@
       (~s "/b/a/" "bob")
       :expect "aob")
 
-    (test "Regexp subst global"
+    (test "Regexp subst gulpal"
       (~s "/b/a/g" "bob")
       :expect "aoa")
 
@@ -285,7 +285,7 @@
       (~s "/B/A/i" "bob")
       :expect "Aob")
 
-    (test "Regexp subst nocase global"
+    (test "Regexp subst nocase gulpal"
        (~s "/B/A/gi" "bob")
        :expect "AoA")
   
@@ -293,7 +293,7 @@
        (~s "/b/a/" (list "bob" "cob"))
        :expect (list "aob" "coa"))
   
-    (test "Regexp subst global list"
+    (test "Regexp subst gulpal list"
        (~s "/b/a/g" (list "bob" "cob"))
        :expect (list "aoa" "coa"))
   
@@ -504,76 +504,76 @@
          :expect 3600)
        )
 
-(test-suite ("Glob / unglob"
+(test-suite ("gulp / ungulp"
               :setup (when (probe-file "/tmp/tarno")
                         (delete-file "/tmp/tarno")))
 
-   (test "Glob/unglob file"
-     (progn (unglob "/tmp/tarno" "abcde") 
-            (glob "/tmp/tarno"))
+   (test "gulp/ungulp file"
+     (progn (ungulp "/tmp/tarno" "abcde") 
+            (gulp "/tmp/tarno"))
      :expect "abcde")
 
-   (test "Glob file offset"
-     (glob "/tmp/tarno" :offset 3)
+   (test "gulp file offset"
+     (gulp "/tmp/tarno" :offset 3)
      :expect "de")
 
-   (test "Glob file negative offset"
-     (glob "/tmp/tarno" :offset -3)
+   (test "gulp file negative offset"
+     (gulp "/tmp/tarno" :offset -3)
      :expect "cde")
 
-   (test "Glob file limit"
-     (glob "/tmp/tarno" :limit 3)
+   (test "gulp file limit"
+     (gulp "/tmp/tarno" :limit 3)
      :expect "abc")
 
-   (test "Glob file offset+limit"
-     (glob "/tmp/tarno" :offset 2 :limit 3)
+   (test "gulp file offset+limit"
+     (gulp "/tmp/tarno" :offset 2 :limit 3)
      :expect "cde")
 
-   (test "Glob file offset+limit 2"
-     (glob "/tmp/tarno" :offset 2 :limit 2)
+   (test "gulp file offset+limit 2"
+     (gulp "/tmp/tarno" :offset 2 :limit 2)
      :expect "cd")
 
-   (test "Glob file neg offset+limit"
-     (glob "/tmp/tarno" :offset -3 :limit 2)
+   (test "gulp file neg offset+limit"
+     (gulp "/tmp/tarno" :offset -3 :limit 2)
      :expect "cd")
 
-   (test "Glob stream"
+   (test "gulp stream"
      (with-input-from-string (s "abcde")
-       (glob s))
+       (gulp s))
      :expect "abcde")
 
-   (test "Glob stream offset"
+   (test "gulp stream offset"
      (with-input-from-string (s "abcde")
-       (glob s :offset 3))
+       (gulp s :offset 3))
      :expect "de")
 
-   (test "Glob stream negative offset"
+   (test "gulp stream negative offset"
      (with-input-from-string (s "abcde")
-       (glob s :offset -3))
+       (gulp s :offset -3))
      :expect                   "cde")
 
-   (test "Glob stream limit"
+   (test "gulp stream limit"
      (with-input-from-string (s "abcde")
-       (glob s :limit 3))
+       (gulp s :limit 3))
      :expect                     "abc")
 
-   (test "Glob stream offset+limit"
+   (test "gulp stream offset+limit"
      (with-input-from-string (s "abcde")
-       (glob s :offset 2 :limit 3))
+       (gulp s :offset 2 :limit 3))
      :expect          "cde")
 
-   (test "Glob stream offset+limit 2"
+   (test "gulp stream offset+limit 2"
      (with-input-from-string (s "abcde")
-       (glob s :offset 2 :limit 2))
+       (gulp s :offset 2 :limit 2))
      :expect           "cd")
 
-   (test "Glob stream neg offset+limit"
+   (test "gulp stream neg offset+limit"
          (with-input-from-string (s "abcde")
-           (glob s :offset -3 :limit 2))
+           (gulp s :offset -3 :limit 2))
          :expect          "cd"))
      
- (test-suite ("glob-flines"
-              :setup (unglob "/tmp/tarno" (format nil "a~%b~%c~%d~%e~%") :if-exists :overwrite)
+ (test-suite ("gulp-flines"
+              :setup (ungulp "/tmp/tarno" (format nil "a~%b~%c~%d~%e~%") :if-exists :overwrite)
               :teardown (if (probe-file "/tmp/tarno") (delete-file "/tmp/tarno")))
 
    (test "mapflines"
