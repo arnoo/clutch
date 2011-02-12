@@ -572,12 +572,16 @@
            (gulp s :offset -3 :limit 2))
          :expect          "cd"))
      
- (test-suite ("gulp-flines"
+ (test-suite ("gulplines, mapflines"
               :setup (ungulp "/tmp/tarno" (format nil "a~%b~%c~%d~%e~%") :if-exists :overwrite)
               :teardown (if (probe-file "/tmp/tarno") (delete-file "/tmp/tarno")))
 
    (test "mapflines"
          (mapflines #'identity "/tmp/tarno")
+         :expect (list "a" "b" "c" "d" "e"))
+
+   (test "gulplines"
+         (gulplines "/tmp/tarno")
          :expect (list "a" "b" "c" "d" "e"))
 
    (test "mapflines offset"
@@ -642,7 +646,15 @@
         (mapflines #'identity "/tmp/tarno"
            :offset -3
            :limit 2))
-     :expect (list "c" "d")))
+     :expect (list "c" "d"))
+
+   (test "with-each-line string"
+     (let ((result nil))
+       (with-each-line ("a\nb\nc\nd\ne" :offset -3 :limit 2)
+         (push it result))
+       result)
+     :expect (list "c" "d"))
+   )
 
 (test-suite ("save"
               :setup (mkdir "/tmp/tarno")

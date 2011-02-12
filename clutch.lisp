@@ -24,7 +24,7 @@
               #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:popend
               #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:rlambda
               #:lc #:uc #:str #:symb #:keyw  #:~ #:~s #:/~ #:resplit #:split #:join #:x #:lpad #:rpad #:lines
-              #:gulp #:ungulp #:gulp-lines #:with-each-line #:mapflines 
+              #:gulp #:ungulp #:gulplines #:with-each-fline #:with-each-line #:mapflines 
               #:f= #:f/= #:with-temporary-file #:it
               #:sh #:ls #:argv #:mkhash #:keys #:rm #:mkdir 
               #:fload #:fsave #:fselect #:fselect1
@@ -69,7 +69,7 @@
   "Converts <args> to a string"
   (with-output-to-string (s)
     (mapcar (lambda (o) (princ o s))
-            (remove-if-not #'identity (flatten args)))))
+            (remove nil (flatten args)))))
 
 (defun lc (object)
   "Converts an object to a lowercase string"
@@ -200,7 +200,7 @@
    ;
    ; Function composition reader macro a la Arc:
    ; (car!list 2 3) is equivalent to (car (list 2 3))
-   ;
+   ; can't be use like (mapcar +1!sqrt lst) though
   
    (defun compose-reader (stream char)
      (declare (ignore char))
@@ -293,6 +293,10 @@
       ,@(loop for form in forms
           collect `(awhen ,(car form) (return-from ,blockname ,(cadr form))))
       nil)))
+
+(defun ? (test)
+  "Returns nil if <test> evaluates to nil, t otherwise"
+  (if test t nil))
 
 (defun vector-to-list* (object)
   (let ((result (list nil))
@@ -549,6 +553,9 @@
                                                    buf 0)))))))
 
 (defmacro with-each-fline (args &rest body)
+  "<args> should look like (path-or-stream &key (offset 0) limit)
+   Executes <body> for each line in <path-or-stream>, with the line
+   available as <it>, and the line number as <@it>."
   (destructuring-bind (path-or-stream &key (offset 0) limit) args
     `(block read-loop
         (let ((offset ,offset)
@@ -558,20 +565,26 @@
           (when (and (not (looks-like-file ,path-or-stream))
                      (< offset 0))
             ; we have to read the whole thing
-            (let ((done-lines 0))
+            (let ((done-lines 0)
+                  (@it offset))
               (loop for it in {(resplit "/\\n/" (gulp ,path-or-stream)) offset (+ offset limit)}
                     do ,@body
+                       (incf @it)
                        (incf done-lines))
               (return-from read-loop done-lines)))
           (with-stream (s ,path-or-stream)
-            (when (and (looks-like-file ,path-or-stream)
+              (when (and (looks-like-file ,path-or-stream)
+                         (= (file-length s) 0))
+                (return-from read-loop 0))
+              (when (and (looks-like-file ,path-or-stream)
                        (< offset 0))
                 ; we can read it backwards to set the file-position then set offset to 0
                 (file-position s (file-length s))
                 (back-n-lines s (- offset))
                 (setf offset 0))
               (let ((skipped-lines 0)
-                    (done-lines 0))
+                    (done-lines 0)
+                    (@it offset))
                 (do ((it (read-line s) (read-line s nil 'eof)))
                     ((eq it 'eof) (values))
                     (if (>= skipped-lines offset)
@@ -579,6 +592,7 @@
                         (when (and limit (>= done-lines limit))
                           (return-from read-loop done-lines))
                         (incf done-lines)
+                        (incf @it)
                         ,@body)
                       (incf skipped-lines)))
                 done-lines))))))
@@ -589,21 +603,33 @@
        (with-each-fline (s :offset ,offset :limit ,limit)
          ,@body))))
 
-(defun gulp-lines (path-or-stream &key (offset 0) limit)
-  "gulps the whole provided file, url or stream into an array of its lines."
+(defun gulplines (path-or-stream &key (offset 0) limit)
+  "Gulps the whole provided file, url or stream into an array of its lines, optionaly starting at line <offset> and limiting output to <limit> lines. <offset> can be negative, in which case reading will start -<offset> lines from the end."
   (let ((lines nil))
     (with-each-fline (path-or-stream :offset offset :limit limit)
       (nconc lines (list it)))
     lines))
 
 (defun mapflines (fn path-or-stream &key  (offset 0) limit)
-  "Apply fn to each line of path-or-stream."
+  "Apply <fn> to each line of <path-or-stream>."
   (let ((lines nil))
     (with-each-fline (path-or-stream :offset offset :limit limit)
       (setf lines (nconc lines (list (funcall fn it)))))
     lines))
 
+(defun grep (regexp file-or-dir &key recurse matches-only names-only lines-only)
+  (if (probe-file (str file-or-dir "/."))
+      (loop for file in (ls file-or-dir :files-only t :recurse recurse)
+            nconc (grep regexp file))
+      (let ((result nil))
+        (with-each-fline (file-or-dir)
+           (let ((matches (~ regexp it)))
+              (when matches
+                (pushend (list file-or-dir @it matches) result))))
+        result)))
+
 (defmacro with-temporary-file (assignment &rest body)
+  "Executes <body> with a temporary file. <assignment> should look like (<filename> <extension>), where <filename> is the variable you want to assign the filename to, and <extension> the extension you want the temporary file to have."
   (destructuring-bind (filename extension) assignment
     `(let ((,filename (str "/tmp/highres_" (get-internal-real-time) (random 100) "." ,extension)))
         (prog1
@@ -704,23 +730,24 @@
 
 (defun ls (path &key recurse files-only dirs-only)
  #+(or :sbcl :cmu :scl :lispworks :abcl)
-  (if
-      (and (probe-file path) (not (probe-file (str path "/."))))
-      (list path)
-    (let* ((contents (directory (str path "/*.*")))
-           (dirs nil)
-           (files nil))
-       (mapcar #'str
-         (if (not (or recurse files-only dirs-only))
-             contents
-             (progn
-               (loop for subpath in contents
-                     when (directory (str subpath "/")) do (push subpath dirs)
-                     when (not (or dirs-only (directory (str subpath "/")))) do (push subpath files))
-               (flatten (when (not dirs-only) files)
-                        (when (not files-only) dirs)
-                        (when recurse
-                           (mapcar [ls _ :recurse recurse :files-only files-only :dirs-only dirs-only] dirs)))))))))
+  (if (directory (str path "/."))
+      (let* ((contents (directory (str path "/*.*")))
+             (dirs nil)
+             (files nil))
+         (mapcar #'str
+           (if (not (or recurse files-only dirs-only))
+               contents
+               (progn
+                 (loop for subpath in contents
+                       do (if (directory (str subpath "/."))
+                              (pushend subpath dirs)
+                              (pushend subpath files)))
+                 (remove nil
+                    (flatten (when (not dirs-only) files)
+                             (when (not files-only) dirs)
+                             (when recurse
+                                (mapcar [ls _ :recurse recurse :files-only files-only :dirs-only dirs-only] dirs))))))))
+      (if dirs-only nil (list path))))
 
 (defun mkdir (dir)
   (ensure-directories-exist (make-pathname :directory dir)))
@@ -820,10 +847,7 @@
                      (incf loaded)
                      (fload from _))
                  nil]
-             (resplit "/\\n/" (sh (str "cd '" from "' && grep -l '"
-                                                             (str (prin1-to-string key) " "
-                                                                  (prin1-to-string value))
-                                                                   "' *")))))))
+             (grep (str (prin1-to-string key) " " (prin1-to-string value)) from)))))
 
 (defun fselect1 (from &key key value)
   (aif (fselect from :key key :value value :limit 1)
@@ -934,8 +958,7 @@
   (- (ut date1) (ut date2)))
 
 (defun decode-duration (duration)
-  "Transforms a duration string : '1m 1d'... into a number of seconds
-   Warning : approximative for months and years"
+  "Transforms a duration string : '1m 1d'... into an approximated number of seconds"
   (if (numberp duration)
       duration
       (apply #'+ (mapcar (lambda (dur)
@@ -954,8 +977,7 @@
                          (split " " duration)))))
 
 (defun encode-duration (duration)
-  "Transforms a number of seconds into a duration string : '1m 1d'...
-   Warning : approximative for months and years"
+  "Transforms a number of seconds into a duration string : '1m 1d'... into an approximated number of seconds"
   (~s "/\\s+$//"
      (let* ((du duration)
          (y  (floor du (* 12 30 24 3600)))
@@ -1153,7 +1175,3 @@
                       do (setf form (read f nil 'EOF))
                          (unless (eq form 'EOF) (eval form)))
                 (setf offset (file-position f))))))
-
-(defun ? (test)
-  "Returns nil if <test> evaluates to nil, t otherwise"
-  (if test t nil))
