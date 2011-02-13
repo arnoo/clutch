@@ -261,7 +261,7 @@
       (~ "/\\w/" "bob")
       :expect '("b"))
 
-    (test "Regexp gulpal"
+    (test "Regexp global"
       (~ "/\\w/g" "bob")
       :expect '(("b") ("o") ("b")))
 
@@ -270,14 +270,14 @@
       :expect '(("bo" "b")))
 
     (test "Regexp group extract"
-      (~ "/(\\w)\\w/g" "bob" 1 0)
-      :expect "b")
+      (~ "/(\\w)\\w/g" "boda" 1)
+      :expect (list "b" "d"))
 
     (test "Regexp subst"
       (~s "/b/a/" "bob")
       :expect "aob")
 
-    (test "Regexp subst gulpal"
+    (test "Regexp subst global"
       (~s "/b/a/g" "bob")
       :expect "aoa")
 
@@ -285,7 +285,7 @@
       (~s "/B/A/i" "bob")
       :expect "Aob")
 
-    (test "Regexp subst nocase gulpal"
+    (test "Regexp subst nocase global"
        (~s "/B/A/gi" "bob")
        :expect "AoA")
   
@@ -293,7 +293,7 @@
        (~s "/b/a/" (list "bob" "cob"))
        :expect (list "aob" "coa"))
   
-    (test "Regexp subst gulpal list"
+    (test "Regexp subst global list"
        (~s "/b/a/g" (list "bob" "cob"))
        :expect (list "aoa" "coa"))
   
@@ -571,6 +571,23 @@
          (with-input-from-string (s "abcde")
            (gulp s :offset -3 :limit 2))
          :expect          "cd"))
+
+     
+; (test-suite ("grep"
+;              :setup (ungulp "/tmp/tarno" (format nil "a~%b~%c~%d~%e~%") :if-exists :overwrite)
+;              :teardown (if (probe-file "/tmp/tarno") (delete-file "/tmp/tarno")))
+;
+;    (test "grep <string> <file>"
+;       )
+;
+;    (test "grep <string> <dir>"
+;       )
+;
+;    (test "grep <string> <dir> recursive"
+;       )
+;
+; )
+
      
  (test-suite ("gulplines, mapflines"
               :setup (ungulp "/tmp/tarno" (format nil "a~%b~%c~%d~%e~%") :if-exists :overwrite)

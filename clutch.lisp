@@ -200,7 +200,7 @@
    ;
    ; Function composition reader macro a la Arc:
    ; (car!list 2 3) is equivalent to (car (list 2 3))
-   ; can't be use like (mapcar +1!sqrt lst) though
+   ; can't be used like (mapcar +1!sqrt lst) though
   
    (defun compose-reader (stream char)
      (declare (ignore char))
@@ -222,7 +222,7 @@
             while end)))
 
 (defun o (&rest fns)
-  "Compose functions"
+  "Compose functions <fns>"
   (if (cdr fns)
       (lambda (&rest args) (funcall (car fns) (apply (apply #'o (cdr fns)) args)))
       (car fns)))
@@ -241,9 +241,9 @@
   (mapcar (lambda (x) (access object x))
           places))
 
-(defun in (seq elmt)
-	"does seq contain elmt ?"
-	(not (null (position elmt seq :test #'equal))))
+(defun in (seq obj)
+	"Returns t if <seq> contains <obj> ?"
+	(not (null (position obj seq :test #'equal))))
 
 ;
 ; Anaphoric macros
@@ -254,6 +254,7 @@
 	`(let ((it ,form)) ,@body))
 
 (defmacro aif (test then &optional else)
+  "Executes <then with <it> bound to result of evaluating <test> if this result is not nil, <else> otherwise"
   `(awith ,test
      (if it
          ,then
@@ -282,7 +283,6 @@
          do (progn ,@body)))
 
 (defmacro aand (test &rest tests)
-  "n "
   `(awith ,test
       (and it ,@tests)))
 
@@ -324,38 +324,36 @@
      (setf (cadr result) (cl-ppcre::regex-replace-all "\\\\/" (cadr result) "/"))
      (apply #'values (reverse result))))
 
-(defgeneric ~ (re string-or-list &optional match-nb1 match-nb2))
+(defgeneric ~ (re string-or-list &optional capture-nb))
 
-(defmethod ~ ((re string) (string-or-list string) &optional match-nb1 match-nb2)
+(defmethod ~ ((re string) (string-or-list string) &optional capture-nb)
    "Returns nil if regular expression <re> does not match the string
     returns the part of the string that matches <re> and all grouped matches ()
-    if <match-nb1> is not nil, only match number <match-nb1> will be returned
+    if <capture-nb> is not nil, only capture number <capture-nb> will be returned
+    for each match.
     
     example : (re \"\w+(\d)\" \"ab2cc\")"
   (multiple-value-bind (regexp subre flags) (parse-re re)
     (declare (ignorable subre))
-    (let ((match-indexes (cl-ppcre:all-matches regexp string-or-list)))
-       (when match-indexes
-         (funcall (if match-nb2
-                      [nth match-nb2 _]
-                      (if (in flags #\g)
-                              #'identity
-                              #'first))
-           (loop for i from 0
-                       below (if (in flags #\g) (length match-indexes) 1)
-                       by 2
-              collect
-              (funcall (if match-nb1 [nth match-nb1 _] #'identity)
-                (let ((m (multiple-value-list (cl-ppcre:scan-to-strings regexp string-or-list :start {match-indexes i}))))
-                  (if {m 1} (cons (car m) (vector-to-list* (cadr m))) nil)))))))))
+    (let ((result nil))
+      (cl-ppcre:do-matches (match-start match-end regexp string-or-list result)
+        (pushend (funcall (aif capture-nb [_ it] #'identity)
+                    (awith (multiple-value-list (cl-ppcre:scan-to-strings regexp string-or-list :start match-start :end match-end))
+                      (cons (car it) (vector-to-list* (cadr it)))))
+                 result)
+        (when (and result (not (in flags #\g)))
+          (return (car result)))))))
 
-(defmethod ~ ((re string) (string-or-list list) &optional match-nb1 match-nb2)
+(defmethod ~ ((re string) (string-or-list list) &optional capture-nb)
   "returns the elements of list that match <re>
     
+   Specify a <capture-nb> value to return capture number <capture-nb> instead of the string that matches.
+
    example : (re \"\w+(\d)\" \"ab2cc\")"
-  (let ((matching (remove-if-not [cl-ppcre:scan (parse-re re) _] string-or-list)))
-       (if match-nb1
-           (mapcar [~ re _ match-nb1 match-nb2] matching)
+  (let ((matching (remove-if-not [cl-ppcre:do-matches (a b (parse-re re) _) (return t)]
+                                 string-or-list)))
+       (if capture-nb
+           (mapcar [~ re _ capture-nb] matching)
            matching)))
 
 (defgeneric /~ (re obj))
@@ -373,22 +371,22 @@
   (remove-if [cl-ppcre::scan (parse-re re) _]
              obj))
 
-(defgeneric ~s (re obj &optional match-nb))
+(defgeneric ~s (re obj &optional capture-nb))
 
-(defmethod ~s ((re string) (obj string) &optional match-nb)
+(defmethod ~s ((re string) (obj string) &optional capture-nb)
   "Replaces all substrings that match <re> in <string> by <replacement>.
   <flags> can contain Perl regexp flags like g
   replacement can be a string which may contain the special substrings \\& for the whole match, \\` for the part of target-string before the match, \\' for the part of target-string after the match, \\N or \\{N} for the Nth register where N is a positive integer."
   (multiple-value-bind (regexp subre flags) (parse-re re)
-    (let ((matches (~ re obj match-nb)))
+    (let ((matches (~ re obj capture-nb)))
       (values
         (if (in flags #\g)
           (cl-ppcre::regex-replace-all regexp obj subre)
           (cl-ppcre::regex-replace     regexp obj subre))
         matches))))
 
-(defmethod ~s ((re string) (obj list) &optional match-nb)
-  (mapcar [~s re _ match-nb] obj))
+(defmethod ~s ((re string) (obj list) &optional capture-nb)
+  (mapcar [~s re _ capture-nb] obj))
 
 (defun resplit (re str)
   (cl-ppcre:split (parse-re re) str))
@@ -435,8 +433,7 @@
                  (if b (char-code b) nil)
                  step)))
 
-(defmacro with-stream (args &rest body)
-  (destructuring-bind (name path-or-stream &key binary) args
+(defmacro with-stream ((name path-or-stream &key binary) &rest body)
    `(cond ((streamp ,path-or-stream)
              (let ((,name ,path-or-stream))
                 ,@body))
@@ -457,7 +454,7 @@
                 ,@body))
           ((stringp ,path-or-stream)
              (with-open-file (,name ,path-or-stream)
-                ,@body)))))
+                ,@body))))
 
 (defun looks-like-file (path-or-stream)
   (not (or (streamp path-or-stream)
@@ -552,11 +549,10 @@
                                         (length (~ (str "/^" (x "[^\\n]*\\n" (- lines n)) "/")
                                                    buf 0)))))))
 
-(defmacro with-each-fline (args &rest body)
+(defmacro with-each-fline ((path-or-stream &key (offset 0) limit) &rest body)
   "<args> should look like (path-or-stream &key (offset 0) limit)
    Executes <body> for each line in <path-or-stream>, with the line
    available as <it>, and the line number as <@it>."
-  (destructuring-bind (path-or-stream &key (offset 0) limit) args
     `(block read-loop
         (let ((offset ,offset)
               (limit ,limit))
@@ -595,13 +591,12 @@
                         (incf @it)
                         ,@body)
                       (incf skipped-lines)))
-                done-lines))))))
+                done-lines)))))
 
-(defmacro with-each-line (args &rest body)
-  (destructuring-bind (str &key (offset 0) limit) args
-    `(with-input-from-string (s ,str)
-       (with-each-fline (s :offset ,offset :limit ,limit)
-         ,@body))))
+(defmacro with-each-line ((str &key (offset 0) limit) &rest body)
+  `(with-input-from-string (s ,str)
+     (with-each-fline (s :offset ,offset :limit ,limit)
+       ,@body)))
 
 (defun gulplines (path-or-stream &key (offset 0) limit)
   "Gulps the whole provided file, url or stream into an array of its lines, optionaly starting at line <offset> and limiting output to <limit> lines. <offset> can be negative, in which case reading will start -<offset> lines from the end."
@@ -617,25 +612,32 @@
       (setf lines (nconc lines (list (funcall fn it)))))
     lines))
 
+(defun directoryp (path)
+  "Returns <path> if <path> leads to a directory, nil otherwise"
+  (probe-file (str file-or-dir "/.")))
+
 (defun grep (regexp file-or-dir &key recurse matches-only names-only lines-only)
   (if (probe-file (str file-or-dir "/."))
       (loop for file in (ls file-or-dir :files-only t :recurse recurse)
-            nconc (grep regexp file))
+            nconc (grep regexp file :matches-only matches-only :names-only names-only :lines-only lines-only))
       (let ((result nil))
         (with-each-fline (file-or-dir)
            (let ((matches (~ regexp it)))
               (when matches
-                (pushend (list file-or-dir @it matches) result))))
+                (cond 
+                  (matches-only (pushend matches result))
+                  (names-only   (pushnew file-or-dir result))
+                  (lines-only   (pushend it result))
+                  (t            (pushend (list file-or-dir @it matches) result))))))
         result)))
 
-(defmacro with-temporary-file (assignment &rest body)
-  "Executes <body> with a temporary file. <assignment> should look like (<filename> <extension>), where <filename> is the variable you want to assign the filename to, and <extension> the extension you want the temporary file to have."
-  (destructuring-bind (filename extension) assignment
-    `(let ((,filename (str "/tmp/highres_" (get-internal-real-time) (random 100) "." ,extension)))
-        (prog1
-           (progn
-              ,@body)
-           (delete-file ,filename)))))
+(defmacro with-temporary-file ((filename extension) &rest body)
+  "Executes <body> with a temporary file. <filename> is the variable you want to assign the filename to, and <extension> the extension you want the temporary file to have."
+  `(let ((,filename (str "/tmp/highres_" (get-internal-real-time) (random 100) "." ,extension)))
+      (prog1
+         (progn
+            ,@body)
+         (delete-file ,filename))))
 
 ;
 ; Comparison of results of function application : 
