@@ -32,6 +32,8 @@
   :depends-on (:cl-ppcre
                :ironclad
                :uuid
+               :flexi-streams
+               #-abcl :cl-store
                #-abcl :drakma
                #+sbcl :sb-posix
                #+sbcl :closer-mop)

@@ -32,6 +32,7 @@
 
 (defun fn (x) (+ x *a*))
 
+
 (test-suite ("join / split")
 
   (test "split"
@@ -41,6 +42,8 @@
   (test "join"
     (join " " (list "1" "2" (list "3" "4")))
     :expect "1 2 3 4"))
+
+
 
 (test-suite ("conversions")
 
@@ -62,6 +65,7 @@
     (str (list (list 1 2 3) 2))
     :expect "1232"))
 
+
 (test-suite ("anaphoric macros")
   (test "Awith"
     (awith 22 (+ 1 it))
@@ -75,31 +79,39 @@
     (aif nil 2 it)
     :expect	nil)
 
-  (test "Awhen"
+  (test "if-bind"
+    (if-bind (b nil) b 2)
+    :expect	2)
+
+  (test "if-bind 2"
+    (if-bind (b 2) b 4)
+    :expect	2)
+
+  (test "awhen"
     (let ((a 1))
       (awhen nil (incf a) (incf a))
       a)
     :expect	1)
 
-  (test "Awhen"
+  (test "awhen 2"
     (let ((a 1))
-      (awhen 2 (incf a) (incf a))
+      (awhen 2 (incf a it) (incf a it))
       a)
-    :expect	3)
+    :expect	5)
 
-  (test "Aunless"
+  (test "when-bind"
     (let ((a 1))
-      (aunless nil (incf a) (incf a))
-      a)
-    :expect	3)
-
-  (test "Aunless"
-    (let ((a 1))
-      (aunless 2 (incf a) (incf a))
+      (when-bind (b nil) (incf a) (incf a))
       a)
     :expect	1)
 
-  (test "Awhile"
+  (test "when-bind 2"
+    (let ((a 1))
+      (when-bind (b 2) (incf a b) (incf a b))
+      a)
+    :expect	5)
+
+  (test "awhile"
     (let ((a 1)
           (c t))
       (awhile c
@@ -108,21 +120,31 @@
       a)
     :expect	4)
 
-  (test "Aand"
+  (test "while-bind"
+    (let ((a 1)
+          (c t))
+      (while-bind (b c)
+        (incf a)
+        (when (> a 3) (setf c (not b))))
+      a)
+    :expect	4)
+
+  (test "aand"
     (aand 2 (+ it 3))
     :expect	5)
 
-  (test "Aand 2"
+  (test "aand 2"
     (aand nil 2)
     :expect	nil)
 
-  (test "Acond"
+  (test "acond"
     (acond 
       (nil 22)
       (23 it)
       (t 24))
     :expect	23)
   )
+
 
 (test-suite ("Reader macros")
   (test "Square bracket reader [+ 1 _]"
@@ -204,6 +226,7 @@
     :expect "y")
   )
 
+
 (test-suite ("pick")
    (test "pick list"
       (pick (list 1 2 3) 0 1)
@@ -221,6 +244,7 @@
      (pick (lambda (x) (+ x 1)) 2 4)
      :expect (list 3 5)))
 
+
 (test-suite ("compose")
    (test "compose reader"
      (car!list 2)
@@ -229,6 +253,7 @@
    (test "compose function"
      (funcall (o #'floor #'+) 1 2.5)
      :expect 3))
+
 
 (test-suite ("in, range")
     (test "In <list> <element> -> t"
@@ -256,7 +281,8 @@
       :expect '(#\a #\b #\c #\d))
     )
 
-  (test-suite ("regexps")
+
+(test-suite ("regexps")
     (test "Regexp simple"
       (~ "/\\w/" "bob")
       :expect '("b"))
@@ -309,6 +335,49 @@
        (~ "/\\w(\\d)/" (list "a" "a1" "b" "2") 1)
        :expect '("1")))
 
+
+(test-suite ("rm / probe-dir / mkdir / rmdir")
+    (test "mkdir / probe-dir"
+       (progn (mkdir "/tmp/clutchtest")
+              (probe-dir "/tmp/clutchtest"))
+       :expect-type 'pathname
+       :fatal t)
+
+    (test "rmdir"
+       (progn (rmdir "/tmp/clutchtest")
+              (probe-dir "/tmp/clutchtest"))
+       :expect nil
+       :fatal t)
+
+    (test "rm"
+           (progn (mkdir "/tmp/clutchtest")
+                  (ungulp "/tmp/clutchtest/file" "contents")
+                  (rm "/tmp/clutchtest/file")
+                  (probe-file "/tmp/clutchtest"))
+           :expect #p"/tmp/clutchtest/"
+           :fatal t)
+
+    (test "rm non recursive on dir"
+       (progn (ungulp "/tmp/clutchtest/file" "contents")
+              (rm "/tmp/clutchtest"))
+       :expect-error t
+       :fatal t)
+
+    (test "rm non recursive on dir 2"
+       (and (probe-dir "/tmp/clutchtest") (probe-file "/tmp/clutchtest"))
+       :expect #p"/tmp/clutchtest/"
+       :fatal t)
+
+    (test "rm recursive"
+       (progn (mkdir "/tmp/clutchtest/rep")
+              (ungulp "/tmp/clutchtest/rep/file2" "contents")
+              (rm "/tmp/clutchtest" :recursive t)
+              (probe-dir "/tmp/clutchtest"))
+       :expect nil
+       :fatal t)
+  )
+
+
 (test-suite ("memoize")
 
   (test "memoize 1"
@@ -358,66 +427,68 @@
             :expect 1)
     )
 
-(test-suite ("memoize to disk")
 
-  (test "memoize-to-disk 1"
-      (let ((a 0))
-         (awith (memoize-to-disk [+ _ a])
-           {it 0}
-           (setf a 1)
-           {it 0}))
-      :expect 0)
+;(test-suite ("memoize to disk")
+;
+;  (test "memoize-to-disk 1"
+;      (let ((a 0))
+;         (awith (memoize-to-disk [+ _ a])
+;           {it 0}
+;           (setf a 1)
+;           {it 0}))
+;      :expect 0)
+;
+;  (test "memoize-to-disk 2"
+;          (let ((a 0))
+;             (awith (memoize-to-disk [+ _ a] :remember-last 1)
+;               {it 0}
+;               (setf a 1)
+;               {it 1}
+;               {it 0}))
+;          :expect 1)
+;
+;  (test "memoize-to-disk 3"
+;          (let ((a 0))
+;             (awith (memoize-to-disk [+ _ a] :expire 1)
+;               {it 0}
+;               (setf a 1)
+;               (sleep 2)
+;               {it 0}))
+;          :expect 1)
+;
+;  (test "memoize-to-disk 4"
+;          (let ((a 0))
+;             (awith (memoize-to-disk [+ _ a] :remember-last 1 :expire 10)
+;               {it 0}
+;               (setf a 1)
+;               {it 1}
+;               {it 0}))
+;          :expect 1)
+;
+;  (test "memoize-to-disk 5"
+;          (let ((a 0))
+;             (awith (memoize-to-disk [+ _ a] :remember-last 3)
+;               {it 0}
+;               (setf a 1)
+;               {it 1}
+;               {it 2}
+;               {it 3}
+;               {it 0}))
+;          :expect 1)
+;
+;  (test "memoize-to-disk 6"
+;          (let ((a 0))
+;             (awith (memoize-to-disk [+ _ a] :remember-last 3)
+;               {it 0}
+;               {it 1}
+;               {it 2}
+;               {it 3}
+;               (setf a 1)
+;               {it 3}))
+;          :expect 3)
+;
+;  )
 
-  (test "memoize-to-disk 2"
-          (let ((a 0))
-             (awith (memoize-to-disk [+ _ a] :remember-last 1)
-               {it 0}
-               (setf a 1)
-               {it 1}
-               {it 0}))
-          :expect 1)
-
-  (test "memoize-to-disk 3"
-          (let ((a 0))
-             (awith (memoize-to-disk [+ _ a] :expire 1)
-               {it 0}
-               (setf a 1)
-               (sleep 2)
-               {it 0}))
-          :expect 1)
-
-  (test "memoize-to-disk 4"
-          (let ((a 0))
-             (awith (memoize-to-disk [+ _ a] :remember-last 1 :expire 10)
-               {it 0}
-               (setf a 1)
-               {it 1}
-               {it 0}))
-          :expect 1)
-
-  (test "memoize-to-disk 5"
-          (let ((a 0))
-             (awith (memoize-to-disk [+ _ a] :remember-last 3)
-               {it 0}
-               (setf a 1)
-               {it 1}
-               {it 2}
-               {it 3}
-               {it 0}))
-          :expect 1)
-
-  (test "memoize-to-disk 6"
-          (let ((a 0))
-             (awith (memoize-to-disk [+ _ a] :remember-last 3)
-               {it 0}
-               {it 1}
-               {it 2}
-               {it 3}
-               (setf a 1)
-               {it 3}))
-          :expect 3)
-
-  )
 
 (test-suite ("time and date")
        (test "ut"
@@ -504,37 +575,38 @@
          :expect 3600)
        )
 
+
 (test-suite ("gulp / ungulp"
-              :setup (when (probe-file "/tmp/tarno")
-                        (delete-file "/tmp/tarno")))
+              :setup (rm "/tmp/clutchtest" :recursive t)
+              :teardown (rm "/tmp/clutchtest" :recursive t))
 
    (test "gulp/ungulp file"
-     (progn (ungulp "/tmp/tarno" "abcde") 
-            (gulp "/tmp/tarno"))
+     (progn (ungulp "/tmp/clutchtest" "abcde") 
+            (gulp "/tmp/clutchtest"))
      :expect "abcde")
 
    (test "gulp file offset"
-     (gulp "/tmp/tarno" :offset 3)
+     (gulp "/tmp/clutchtest" :offset 3)
      :expect "de")
 
    (test "gulp file negative offset"
-     (gulp "/tmp/tarno" :offset -3)
+     (gulp "/tmp/clutchtest" :offset -3)
      :expect "cde")
 
    (test "gulp file limit"
-     (gulp "/tmp/tarno" :limit 3)
+     (gulp "/tmp/clutchtest" :limit 3)
      :expect "abc")
 
    (test "gulp file offset+limit"
-     (gulp "/tmp/tarno" :offset 2 :limit 3)
+     (gulp "/tmp/clutchtest" :offset 2 :limit 3)
      :expect "cde")
 
    (test "gulp file offset+limit 2"
-     (gulp "/tmp/tarno" :offset 2 :limit 2)
+     (gulp "/tmp/clutchtest" :offset 2 :limit 2)
      :expect "cd")
 
    (test "gulp file neg offset+limit"
-     (gulp "/tmp/tarno" :offset -3 :limit 2)
+     (gulp "/tmp/clutchtest" :offset -3 :limit 2)
      :expect "cd")
 
    (test "gulp stream"
@@ -572,95 +644,134 @@
            (gulp s :offset -3 :limit 2))
          :expect          "cd"))
 
-     
-; (test-suite ("grep"
-;              :setup (ungulp "/tmp/tarno" (format nil "a~%b~%c~%d~%e~%") :if-exists :overwrite)
-;              :teardown (if (probe-file "/tmp/tarno") (delete-file "/tmp/tarno")))
-;
-;    (test "grep <string> <file>"
-;       )
-;
-;    (test "grep <string> <dir>"
-;       )
-;
-;    (test "grep <string> <dir> recursive"
-;       )
-;
-; )
+
+(test-suite ("grep"
+             :setup (progn (mkdir "/tmp/clutchtest")
+                           (ungulp "/tmp/clutchtest/1" (format nil "a~%b~%c~%d~%e~%") :if-exists :overwrite)
+                           (ungulp "/tmp/clutchtest/2" (format nil "b~%a~%c~%d~%e~%") :if-exists :overwrite)
+                           (ungulp "/tmp/clutchtest/3" (format nil "o~%b~%c~%d~%e~%") :if-exists :overwrite)
+                           (mkdir "/tmp/clutchtest/subdir")
+                           (ungulp "/tmp/clutchtest/subdir/1" (format nil "o~%d~%c~%b~%e~%") :if-exists :overwrite)
+                           (mkdir "/tmp/clutchtest/subdir2")
+                           (ungulp "/tmp/clutchtest/subdir2/1" (format nil "o~%c~%b~%d~%e~%") :if-exists :overwrite))
+             :teardown (rm "/tmp/clutchtest" :recursive t))
+
+    (test "grep <regexp> <file>"
+       (grep "/b/" "/tmp/clutchtest/1")
+       :expect (list (list #p"/tmp/clutchtest/1" 2 (list "b"))))
+
+    (test "grep <regexp> <dir>"
+       (grep "/b/" "/tmp/clutchtest/")
+       :expect (list (list #p"/tmp/clutchtest/1" 2 (list "b"))
+                     (list #p"/tmp/clutchtest/2" 1 (list "b"))
+                     (list #p"/tmp/clutchtest/3" 4 (list "b"))))
+
+    (test "grep <regexp> <dir> recursive"
+       (grep "/b/" "/tmp/clutchtest/" :recursive t)
+       :expect (list (list #p"/tmp/clutchtest/1" 2 (list "b"))
+                     (list #p"/tmp/clutchtest/2" 1 (list "b"))
+                     (list #p"/tmp/clutchtest/3" 4 (list "b"))
+                     (list #p"/tmp/clutchtest/subdir/1" 4 (list "b"))
+                     (list #p"/tmp/clutchtest/subdir2/1" 3 (list "b"))))
+
+    (test "grep <regexp> <dir> recursive names-only"
+       (grep "/b/" "/tmp/clutchtest/" :recursive t :names-only t)
+       :expect (list #p"/tmp/clutchtest/1"
+                     #p"/tmp/clutchtest/2"
+                     #p"/tmp/clutchtest/3"
+                     #p"/tmp/clutchtest/subdir/1"
+                     #p"/tmp/clutchtest/subdir2/1"))
+
+    (test "grep <regexp> <dir> recursive capture"
+       (grep "/(\\w)/" "/tmp/clutchtest/" :recursive t :capture 1)
+       :expect (list (list #p"/tmp/clutchtest/1" 2 (list "b" "b"))
+                     (list #p"/tmp/clutchtest/2" 1 (list "b" "b"))
+                     (list #p"/tmp/clutchtest/3" 4 (list "b" "b"))
+                     (list #p"/tmp/clutchtest/subdir/1" 4 (list "b" "b"))
+                     (list #p"/tmp/clutchtest/subdir2/1" 3 (list "b" "b"))))
+
+    (test "grep <regexp> <dir> recursive matches-only + capture"
+       (grep "/(\\w)/" "/tmp/clutchtest/" :recursive t :matches-only t :capture 1)
+       :expect (list (list #p"/tmp/clutchtest/1" 2 (list "2" "2"))))
+
+    (test "grep <regexp> <dir> recursive lines-only"
+       (grep "/b/" "/tmp/clutchtest/" :recursive t :lines-only t)
+       :expect (list 2 1 4 4 3))
+ )
 
      
  (test-suite ("gulplines, mapflines"
-              :setup (ungulp "/tmp/tarno" (format nil "a~%b~%c~%d~%e~%") :if-exists :overwrite)
-              :teardown (if (probe-file "/tmp/tarno") (delete-file "/tmp/tarno")))
+              :setup (ungulp "/tmp/clutchtest" (format nil "a~%b~%c~%d~%e~%") :if-exists :overwrite)
+              :teardown (rm "/tmp/clutchtest"))
 
    (test "mapflines"
-         (mapflines #'identity "/tmp/tarno")
+         (mapflines #'identity "/tmp/clutchtest")
          :expect (list "a" "b" "c" "d" "e"))
 
    (test "gulplines"
-         (gulplines "/tmp/tarno")
+         (gulplines "/tmp/clutchtest")
          :expect (list "a" "b" "c" "d" "e"))
 
    (test "mapflines offset"
-         (mapflines #'identity "/tmp/tarno"
+         (mapflines #'identity "/tmp/clutchtest"
                     :offset 1)
          :expect (list "b" "c" "d" "e"))
 
    (test "mapflines limit"
-         (mapflines #'identity "/tmp/tarno"
+         (mapflines #'identity "/tmp/clutchtest"
                     :limit 2)
          :expect (list "a" "b"))
 
    (test "mapflines limit + offset"
-         (mapflines #'identity "/tmp/tarno"
+         (mapflines #'identity "/tmp/clutchtest"
                     :offset 2
                     :limit 2)
          :expect (list "c" "d"))
 
    (test "mapflines -offset"
-     (mapflines #'identity "/tmp/tarno"
+     (mapflines #'identity "/tmp/clutchtest"
            :offset -2)
      :expect (list "d" "e"))
 
    (test "mapflines -offset+limit"
-     (mapflines #'identity "/tmp/tarno"
+     (mapflines #'identity "/tmp/clutchtest"
            :offset -3
            :limit 2)
      :expect (list "c" "d"))
 
    (test "mapflines stream"
      (with-input-from-string (s "a\nb\nc\nd\ne")
-        (mapflines #'identity "/tmp/tarno"))
+        (mapflines #'identity "/tmp/clutchtest"))
      :expect (list "a" "b" "c" "d" "e"))
 
    (test "mapflines stream offset"
      (with-input-from-string (s "a\nb\nc\nd\ne")
-        (mapflines #'identity "/tmp/tarno"
+        (mapflines #'identity "/tmp/clutchtest"
            :offset 1))
      :expect (list "b" "c" "d" "e"))
 
    (test "mapflines stream limit"
      (with-input-from-string (s "a\nb\nc\nd\ne")
-        (mapflines #'identity "/tmp/tarno"
+        (mapflines #'identity "/tmp/clutchtest"
            :limit 2))
      :expect (list "a" "b"))
 
    (test "mapflines stream limit+offset"
      (with-input-from-string (s "a\nb\nc\nd\ne")
-        (mapflines #'identity "/tmp/tarno"
+        (mapflines #'identity "/tmp/clutchtest"
            :offset 2
            :limit 2))
      :expect (list "c" "d"))
 
    (test "mapflines stream -offset"
      (with-input-from-string (s "a\nb\nc\nd\ne")
-        (mapflines #'identity "/tmp/tarno"
+        (mapflines #'identity "/tmp/clutchtest"
            :offset -2))
      :expect (list "d" "e"))
 
    (test "mapflines stream -offset+limit"
      (with-input-from-string (s "a\nb\nc\nd\ne")
-        (mapflines #'identity "/tmp/tarno"
+        (mapflines #'identity "/tmp/clutchtest"
            :offset -3
            :limit 2))
      :expect (list "c" "d"))
@@ -672,34 +783,6 @@
        result)
      :expect (list "c" "d"))
    )
-
-(test-suite ("save"
-              :setup (mkdir "/tmp/tarno")
-              :teardown (sh "rm -rf /tmp/tarno"))
-
-    (test "Save not timestamped 1"
-      (fsave "test" "/tmp/tarno")
-      :expect 0)
-
-    (test "Save not timestamped 2"
-      (fsave "test" "/tmp/tarno")
-      :expect 1)
-
-    (test "Save not timestamped 3"
-      (fsave "test" "/tmp/tarno")
-      :expect 2)
-
-    (test "Save not timestamped 4"
-      (fsave "test" "/tmp/tarno" :id 2)
-      :expect 2)
-
-    (test "Save timestamped "
-      (fsave "test" "/tmp/tarno" :id 2 :timestamped t)
-      :expect   2)
-
-    (test "Save timestamped 2"
-      (fsave "test" "/tmp/tarno" :id 2 :timestamped t)
-      :expect   2))
 
 (test-suite ("keys, mkhash")
     (test "mkhash"

@@ -18,18 +18,21 @@
 
 (defpackage :clutch
     (:use     #:cl)
-    (:export  #:date #:d- #:d+ #:d-delta #:ut #:miltime #:y-m-d #:date-wom #:date-week
+    (:export  #:date #:d- #:d+ #:d-delta #:ut #:miltime #:y-m-d #:date-wom #:date-week #:to-zone
+              #:date-rfc2822 #:date-gnu #:decode-duration
               #:d= #:d/= #:d> #:d< #:d<= #:d>=
-              #:enable-arc-lambdas #:enable-brackets #:defstruct-and-export 
+              #:enable-arc-lambdas #:enable-brackets #:enable-compose #:defstruct-and-export 
               #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:popend
-              #:aif #:aand #:awhen #:awhile #:awith #:aunless #:acond #:rlambda
-              #:lc #:uc #:str #:symb #:keyw  #:~ #:~s #:/~ #:resplit #:split #:join #:x #:lpad #:rpad #:lines
-              #:gulp #:ungulp #:gulplines #:with-each-fline #:with-each-line #:mapflines 
-              #:f= #:f/= #:with-temporary-file #:it
-              #:sh #:ls #:argv #:mkhash #:keys #:rm #:mkdir 
-              #:fload #:fsave #:fselect #:fselect1
+              #:while #:aif #:aand #:awhen #:awhile #:awith #:acond #:rlambda
+              #:if-bind #:when-bind #:while-bind
+              #:lc #:uc #:str #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:lpad #:rpad #:lines
+              #:gulp #:ungulp #:gulplines #:with-each-fline #:with-each-line #:mapflines #:file-lines
+              #:f= #:f/= #:f> #:f< #:f<= #:f>= #:f-equal #:with-temporary-file #:it
+              #:sh #:ls #:argv #:mkhash #:rm #:rmdir #:mkdir #:probe-dir #:getenv #:grep
+              #:keys #:kvalues
               #:md5 #:sha1 #:sha256 #:uuid
               #:memoize #:memoize-to-disk #:before #:after #:o 
+              #:+days+ #:+days-abbr+ #:+months+ #:+months-abbr+
               #:xor #:?)
     #-abcl (:export #:getenv))
 
@@ -41,17 +44,26 @@
 (defvar +days-abbr+ (list "Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))
 (defvar +days+ (list "Monday" "Tuesday" "Wednesday" "Thursday" "Friday" "Saturday" "Sunday"))
 
+(defun pushendnew (object lst &key test)
+  "Appends <object> to list <lst> if <object> is not already in <lst> (using equality test <test>)"
+  (unless (in lst object :test test)
+    (pushend object lst)))
+
 (defmacro pushend (object lst)
+  "Appends <object> to list <lst>"
   `(if ,lst
        (nconc ,lst (list ,object))
        (setf ,lst (list ,object))))
 
 (defmacro popend (lst)
+  "Removes the last element of list <lst> and returns it"
   `(prog1
      (last ,lst)
      (nbutlast ,lst)))
 
 (defmacro rlambda (args &rest body)
+  "Creates a lambda that can call itself
+   by using function name 'recurse'"
   `(labels ((recurse ,args ,@body))
       #'recurse))
 
@@ -227,6 +239,26 @@
       (lambda (&rest args) (funcall (car fns) (apply (apply #'o (cdr fns)) args)))
       (car fns)))
 
+;
+; Comparison of results of function application : 
+; (f= #'sin a b) is equivalent to (= (sin a) (sin b))
+; Something generic like (=^sin a b) could be nicer, although
+; I don't think it can be transformed to (= (sin a) (sin b)) using
+; reader macros.
+;
+
+(defmacro defunfcom (&rest fns)
+  `(progn
+      ,@(loop for fn in fns
+              collect `(defun ,(intern (concatenate 'string "F" (symbol-name fn))) (f &rest objects)
+                          ,(format nil "Compares with ~A the results of applying f to each object ~% Ex : (f~A #'sin 1 2) is equivalent to (~A (sin 1) (sin 2))" fn fn fn)
+                          (apply (function ,fn) (mapcar f objects))))))
+
+(defunfcom = /= < > <= >=)
+
+(defun f-equal (f x y)
+  (equal {f x} {f y}))
+
 (defun pick (object &rest places)
   "Select several slots from a struct, object or sequence
    > (pick (list 1 2 3) 0 1)
@@ -241,15 +273,15 @@
   (mapcar (lambda (x) (access object x))
           places))
 
-(defun in (seq obj)
-	"Returns t if <seq> contains <obj> ?"
-	(not (null (position obj seq :test #'equal))))
+(defun in (seq obj &key (test #'equal))
+	"Returns t if <seq> contains <obj> (using equality test <test>)"
+	(not (null (position obj seq :test test))))
 
 ;
 ; Anaphoric macros
 ;
 
-(defmacro awith (form &rest body)
+(defmacro awith (form &body body)
   "Executes <body> with <it> bound to <form>"
 	`(let ((it ,form)) ,@body))
 
@@ -260,24 +292,43 @@
          ,then
          ,else)))
 
-(defmacro awhen (test &rest body)
-  "Executes <body> with <it> bound to result of evaluating <test> if this result is not nil"
-  `(awith ,test
-     (when it
-           ,@body)))
+(defmacro if-bind ((var test) then &optional else)
+  "Executes <then with <var> bound to result of evaluating <test> if this result is not nil, <else> otherwise"
+  `(let ((,var ,test))
+     (if ,var
+         ,then
+         ,else)))
  
-(defmacro aunless (test &rest body)
+(defmacro aunless (test &body body)
   "Executes <body> with <it> bound to result of evaluating <test> if this result is nil"
   `(awith ,test
      (unless it ,@body)))
 
-(defmacro awhile (test &rest body)
+(defmacro awhen (test &body body)
+  "Executes <body> with <it> bound to result of evaluating <test> if this result is not nil"
+  `(awith ,test
+     (when it
+           ,@body)))
+
+(defmacro when-bind ((var test) &body body)
+  "Executes <body> with <var> bound to result of evaluating <test> if this result is not nil"
+  `(let ((,var ,test))
+     (when ,var
+           ,@body)))
+ 
+(defmacro awhile (test &body body)
   "Loops on <body> with <it> bound to result of evaluating <test> as long as this result is not nil"
   `(loop for it = ,test
          while it
          do (progn ,@body)))
 
-(defmacro while (test &rest body)
+(defmacro while-bind ((var test) &body body)
+  "Loops on <body> with <var> bound to result of evaluating <test> as long as this result is not nil"
+  `(loop for ,var = ,test
+         while ,var
+         do (progn ,@body)))
+
+(defmacro while (test &body body)
   "Loops on <body> as long as <test> does not evaluates to nil"
   `(loop while ,test
          do (progn ,@body)))
@@ -527,7 +578,7 @@
         (prin1 object stream)))
     t))
 
-(defun count-lines (file)
+(defun file-lines (file)
   (let ((total 0))
     (with-open-file (file-stream file)
       (do ((it (read-line file-stream) (read-line file-stream nil 'eof)))
@@ -599,7 +650,7 @@
        ,@body)))
 
 (defun gulplines (path-or-stream &key (offset 0) limit)
-  "Gulps the whole provided file, url or stream into an array of its lines, optionaly starting at line <offset> and limiting output to <limit> lines. <offset> can be negative, in which case reading will start -<offset> lines from the end."
+  "Gulps the whole provided file, URL or stream into an array of its lines, optionally starting at line <offset> and limiting output to <limit> lines. <offset> can be negative, in which case reading will start -<offset> lines from the end."
   (let ((lines nil))
     (with-each-fline (path-or-stream :offset offset :limit limit)
       (nconc lines (list it)))
@@ -612,23 +663,22 @@
       (setf lines (nconc lines (list (funcall fn it)))))
     lines))
 
-(defun directoryp (path)
-  "Returns <path> if <path> leads to a directory, nil otherwise"
-  (probe-file (str file-or-dir "/.")))
-
-(defun grep (regexp file-or-dir &key recurse matches-only names-only lines-only)
-  (if (probe-file (str file-or-dir "/."))
-      (loop for file in (ls file-or-dir :files-only t :recurse recurse)
+(defun grep (regexp path &key recursive matches-only names-only lines-only capture)
+  "Check <file-or-dir> for lines matching <regexp>, recursively if <recursive> is not nil.
+   By default, returns (filename line matches) for each line matching. If <capture> is 
+   specified, only capture group <capture> will be returned in matches."
+  (if (probe-dir path)
+      (loop for file in (ls path :files-only t :recursive recursive)
             nconc (grep regexp file :matches-only matches-only :names-only names-only :lines-only lines-only))
       (let ((result nil))
-        (with-each-fline (file-or-dir)
-           (let ((matches (~ regexp it)))
+        (with-each-fline (path)
+           (let ((matches (~ regexp it capture)))
               (when matches
                 (cond 
                   (matches-only (pushend matches result))
-                  (names-only   (pushnew file-or-dir result))
+                  (names-only   (pushendnew (ls path) result))
                   (lines-only   (pushend it result))
-                  (t            (pushend (list file-or-dir @it matches) result))))))
+                  (t            (pushend (list (ls path) @it matches) result))))))
         result)))
 
 (defmacro with-temporary-file ((filename extension) &rest body)
@@ -638,26 +688,6 @@
          (progn
             ,@body)
          (delete-file ,filename))))
-
-;
-; Comparison of results of function application : 
-; (f= #'sin a b) is equivalent to (= (sin a) (sin b))
-; Something generic like (=^sin a b) could be nicer, although
-; I don't think it can be transformed to (= (sin a) (sin b)) using
-; reader macros.
-;
-
-(defmacro defunfcom (&rest fns)
-  `(progn
-      ,@(loop for fn in fns
-              collect `(defun ,(intern (concatenate 'string "F" (symbol-name fn))) (f &rest objects)
-                          ,(format nil "Compares with ~A the results of applying f to each object ~% Ex : (f~A #'sin 1 2) is equivalent to (~A (sin 1) (sin 2))" fn fn fn)
-                          (apply (function ,fn) (mapcar f objects))))))
-
-(defunfcom = /= < > <= >=)
-
-(defun f-equal (f x y)
-  (equal {f x} {f y}))
 
 (defun rpad (string chars &key (with " "))
   (str string (x (str with) (max 0 (- chars (length string))))))
@@ -725,34 +755,60 @@
 (defun filesize (filepath)
   (with-open-file (s filepath) (file-length s)))
 
-(defun rm (file)
-  (if (probe-file file)
-    (delete-file file)
-    nil))
+(defun probe-dir (path)
+  "Returns <path> if <path> leads to a directory, nil otherwise"
+  (probe-file (str path "/.")))
 
-(defun ls (path &key recurse files-only dirs-only)
- #+(or :sbcl :cmu :scl :lispworks :abcl)
-  (if (directory (str path "/."))
+(defun ls (path &key recursive files-only dirs-only)
+  "If <path> is a file, return <path>.
+   If <path> is a directory, return its contents, recursively if <recursive>.
+   Limit resulting list to files if <files-only> and to directories if <dirs-only>.
+   Return nil if <path> is neither a file nor a directory."
+  (if (probe-dir path)
       (let* ((contents (directory (str path "/*.*")))
              (dirs nil)
              (files nil))
-         (mapcar #'str
-           (if (not (or recurse files-only dirs-only))
+         (remove nil
+           (if (not (or recursive files-only dirs-only))
                contents
                (progn
                  (loop for subpath in contents
-                       do (if (directory (str subpath "/."))
+                       do (if (probe-dir subpath)
                               (pushend subpath dirs)
                               (pushend subpath files)))
-                 (remove nil
-                    (flatten (when (not dirs-only) files)
-                             (when (not files-only) dirs)
-                             (when recurse
-                                (mapcar [ls _ :recurse recurse :files-only files-only :dirs-only dirs-only] dirs))))))))
+                 (flatten (when (not dirs-only) files)
+                          (when (not files-only) dirs)
+                          (when recursive
+                             (mapcar [ls _ :recursive recursive :files-only files-only :dirs-only dirs-only] dirs)))))))
       (if dirs-only nil (list path))))
 
+(defun rm (path &key recursive)
+  "Deletes file <path>, or entire directory <path> if <recursive>."
+  (if (probe-file path)
+      (if (probe-dir path)
+          (progn
+             (unless recursive
+                (error "'~A' is a directory and rm not called with recursive=t" path))
+             (mapcar [rm _]
+                     (ls path :recursive t :files-only t))
+             (mapcar [rmdir _]
+                     (sort (ls path :recursive t :dirs-only t)
+                           [f> (o #'length #'str) _ __]))
+             (rmdir path))
+          (delete-file path))
+      nil))
+
 (defun mkdir (dir)
+  "Creates directory <dir>"
   (ensure-directories-exist (make-pathname :directory dir)))
+
+(defun rmdir (dir)
+  "Deletes directory <dir> if it is empty, signals an error otherwise."
+  (if (ls dir)
+    (error "Directory '~A' is not empty" dir))
+    #+:sbcl(sb-posix:rmdir dir)
+    #+:abcl(delete-file dir)
+    #-(or :abcl :sbcl) (error "Not implemented"))
 
 (defun mkhash (&rest args)
   (let ((hash (make-hash-table :test 'equal)))
@@ -785,12 +841,6 @@
 (defun kvalues (o)
   (apply #'pick (append (list o) (keys o))))
 
-#-abcl
-(defun slot-type (class slot)
-  (dolist (s (closer-mop:class-slots (find-class class)))
-     (when (eql (closer-mop:slot-definition-name s) slot)
-        (return-from slot-type (closer-mop:slot-definition-type s)))))
-
 (defmacro defstruct-and-export (structure &rest members)
 	(append
 	  `(progn
@@ -802,59 +852,6 @@
            `(export ,`(quote ,(intern (concatenate 'string (symbol-name structure) "-"
                                                            (symbol-name (if (listp member) (car member) member)))))))
        members)))
-
-(defun fsave (object dir &key timestamped id id-slot)
-  (let ((lock (str dir "/.cl-arno_lock")))
-    (unless timestamped
-      (while (ls lock)
-        (sleep 0.1))
-      (ungulp lock ""))
-    (unwind-protect
-      (progn
-        (unless id (setf id (aif (and id-slot {object id-slot})
-                                 it
-                                 (let ((items (~ "/^.*\\/(.*)(###|$)/" (/~ "/\\/\\.[^\\/]*$/" (ls dir)) 1)))
-                                    (if items
-                                        (if (= (length (~ "/^\\d+$/" items)) (length items))
-                                            (+ 1 (apply #'max (mapcar #'read-from-string items)))
-                                            (loop for u = (uuid)
-                                                  while (ls u)
-                                                  return u))
-                                        0)))))
-        (when id-slot (setf {object id-slot} id))
-        (let ((file (str dir "/" id (if timestamped
-                                      (str "###" (apply #'format
-                                                        (append '(nil "~4,'0D~2,'0D~2,'0D~2,'0D~2,'0D~2,'0D")
-                                                                 (pick (multiple-value-list (get-decoded-time))
-                                                                       5 4 3 2 1 0))))))))
-          (ungulp file object :readable t :if-exists :supersede)))
-      (unless timestamped
-        (rm lock)))
-      id))
-
-(defun fload (dir id &key version)
-  (unless version
-    (awhen (~ (str "/\\/" id "###(\\d+)$/") (ls dir) 1)
-      (setf version (apply #'max (mapcar #'read-from-string it)))))
-  (read-from-string (gulp (str dir "/" id (aif version (str "###" it))))))
-
-(defun fselect (from &key key value limit)
-  (let ((lock (str from "/.cl-arno_lock"))
-        (loaded 0))
-      (while (ls lock)
-        (sleep 0.01))
-  (remove-if-not [and _ (equal {_ key} value)]
-     (mapcar [if (or (not limit) (< loaded limit))
-                 (progn
-                     (incf loaded)
-                     (fload from _))
-                 nil]
-             (grep (str (prin1-to-string key) " " (prin1-to-string value)) from)))))
-
-(defun fselect1 (from &key key value)
-  (aif (fselect from :key key :value value :limit 1)
-    (first it)
-    nil))
 
 (defmacro ironclad-digest (obj algo)
   `(ironclad:byte-array-to-hex-string
@@ -1003,14 +1000,14 @@
              (if (plusp s)  (str s  "s"))))))
 
 (defun d+ (date duration)
-  "Adds a number of seconds or a a duration string : '1m 1d'... to a date
-   Warning : approximative for adding months and years"
+  "Adds a number of seconds or a duration string : '1m 1d'... to a date
+   Warning : approximative for duration strings"
   (date :ut (+ (ut date) (if (numberp duration) duration (decode-duration duration)))
         :zone (date-zone date)))
 
 (defun d- (date duration)
-  "Removes a number of seconds or a a duration string : '1m 1d'... from a date
-   Warning : approximative for adding months and years"
+  "Removes a number of seconds or a duration string : '1m 1d'... from a date
+   Warning : approximative for duration strings"
   (d+ date (- (if (numberp duration) duration (decode-duration duration)))))
 
 (defun d> (&rest dates)
@@ -1070,40 +1067,44 @@
                (setf result a))))
     result)))
 
+(defun cl-store-serialize (obj)
+  (flexi-streams:with-output-to-sequence (s)
+    (cl-store:store obj s)))
+
 (defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last expire)
   "Returns a disk memoized version of function <fn>. If <remember-last> is specified, it will limit the number of remembered results. If <expire> is specified, it will limit the number of seconds a result is remembered for. <force-reset> causes results from previous sessions to be discarded. <prefix> can be used to customize the prefix of cache files, and <dir> to change the directory of these files.
   
-  Warning : remember-last uses file write dates to determine call order. If the function takes less than a second to return, the order of forgotting calls is not garanteed.
+  Warning : remember-last uses file write dates to determine call order. If the function takes less than a second to return, the order of forgetting calls is not guaranteed.
   "
   (unless prefix
     (setf prefix (str "cl-arno-mem-" (~ "/\{([A-E0-9]+)\}/" (str fn) 1)))
     (setf force-reset t))
   (when force-reset (sh (str "rm -f " dir "/" prefix "#*" )))
   #'(lambda (&rest args) 
-    (let* ((time (ut))
-           (file (str dir "/"
-                      prefix
-                      "#" (sha256 (str args))))
-           (lock (str file ".lock")))
-       (while (ls lock)
-         (sleep 0.01))
-       (when expire
-         (loop for f in (~ (str "/\\/" prefix "#[^\\/]+/") (ls dir))
-           do (when (> (- time (file-write-date f)) expire)
-                (rm f))))
-       (if (ls file)
-           (read-from-string (gulp file))
-           (awith (apply fn args)
-              (ungulp lock "")
-              (unwind-protect
-                (progn
-                  (when remember-last
-                    (awith (~ (str "/\\/" prefix "#[^\\/]+/") (ls dir))
-                      (when (>= (length it) remember-last)
-                         (rm (first (sort it [> (file-write-date _) (file-write-date __)]))))))
-                  (ungulp file it :readable t))
-                (rm lock))
-              it)))))
+      (let* ((time (ut))
+             (file (str dir "/" prefix "#" (sha256 #+abcl(prin1-to-string args)
+                                                   #-abcl(cl-store-serialize args))))
+             (lock (str file ".lock")))
+         (while (ls lock)
+           (sleep 0.01))
+         (when expire
+           (loop for f in (~ (str "/\\/" prefix "#[^\\/]+/") (ls dir))
+             do (when (> (- time (file-write-date f)) expire)
+                  (rm f))))
+         (if (ls file)
+             (read-from-string (gulp file))
+             (awith (apply fn args)
+                (ungulp lock "")
+                (unwind-protect
+                  (progn
+                    (when remember-last
+                      (awith (~ (str "/\\/" prefix "#[^\\/]+/") (ls dir))
+                        (when (>= (length it) remember-last)
+                           (rm (first (sort it [> (file-write-date _) (file-write-date __)]))))))
+                    #+abcl(ungulp file it :readable t)
+                    #-abcl(cl-store:store file it))
+                  (rm lock))
+                it)))))
 
 (defun memoize (fn &key remember-last expire)
   "Returns a memoized version of function <fn>. If <remember-last> is specified, it will limit the number of remembered results. If <expire> is specified, it will limit the number of seconds a result is remembered for."
