@@ -22,11 +22,11 @@
               #:date-rfc2822 #:date-gnu #:decode-duration
               #:d= #:d/= #:d> #:d< #:d<= #:d>=
               #:enable-arc-lambdas #:enable-brackets #:enable-compose #:defstruct-and-export 
-              #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:popend
+              #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend
               #:while #:aif #:aand #:awhen #:awhile #:awith #:acond #:rlambda
               #:if-bind #:when-bind #:while-bind
               #:lc #:uc #:str #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:lpad #:rpad #:lines
-              #:gulp #:ungulp #:gulplines #:with-each-fline #:with-each-line #:mapflines #:file-lines
+              #:gulp #:ungulp #:gulplines #:with-each-fline #:mapflines #:file-lines
               #:f= #:f/= #:f> #:f< #:f<= #:f>= #:f-equal #:with-temporary-file #:it
               #:sh #:ls #:argv #:mkhash #:rm #:rmdir #:mkdir #:probe-dir #:getenv #:grep
               #:keys #:kvalues
@@ -44,16 +44,16 @@
 (defvar +days-abbr+ (list "Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))
 (defvar +days+ (list "Monday" "Tuesday" "Wednesday" "Thursday" "Friday" "Saturday" "Sunday"))
 
-(defun pushendnew (object lst &key test)
-  "Appends <object> to list <lst> if <object> is not already in <lst> (using equality test <test>)"
-  (unless (in lst object :test test)
-    (pushend object lst)))
-
 (defmacro pushend (object lst)
   "Appends <object> to list <lst>"
   `(if ,lst
        (nconc ,lst (list ,object))
        (setf ,lst (list ,object))))
+
+(defmacro pushendnew (object lst &key test)
+  "Appends <object> to list <lst> if <object> is not already in <lst> (using equality test <test>)"
+  `(unless (in ,lst ,object :test (if ,test ,test #'equal))
+      (pushend ,object ,lst)))
 
 (defmacro popend (lst)
   "Removes the last element of list <lst> and returns it"
@@ -207,23 +207,6 @@
      (set-macro-character #\] (get-macro-character #\) nil)))
 
    (enable-arc-lambdas))
-
-(eval-when (:compile-toplevel :load-toplevel :execute)
-   ;
-   ; Function composition reader macro a la Arc:
-   ; (car!list 2 3) is equivalent to (car (list 2 3))
-   ; can't be used like (mapcar +1!sqrt lst) though
-  
-   (defun compose-reader (stream char)
-     (declare (ignore char))
-     (prog1
-       (read-delimited-list #\) stream)
-       (unread-char #\) stream)))
-   
-   (defun enable-compose ()
-     (set-macro-character #\! #'compose-reader))
-   
-   (enable-compose))
 
 (defun split (sep seq)
   (if (= (length sep) 0)
@@ -503,7 +486,7 @@
           ((and ,binary (stringp ,path-or-stream))
              (with-open-file (,name ,path-or-stream :element-type '(unsigned-byte 8))
                 ,@body))
-          ((stringp ,path-or-stream)
+          ((or (stringp ,path-or-stream) (pathnamep ,path-or-stream))
              (with-open-file (,name ,path-or-stream)
                 ,@body))))
 
@@ -614,7 +597,7 @@
             ; we have to read the whole thing
             (let ((done-lines 0)
                   (@it offset))
-              (loop for it in {(resplit "/\\n/" (gulp ,path-or-stream)) offset (+ offset limit)}
+              (loop for it in {(resplit "/\\n/" (gulp ,path-or-stream)) offset (+ offset limit -1)}
                     do ,@body
                        (incf @it)
                        (incf done-lines))
@@ -644,16 +627,11 @@
                       (incf skipped-lines)))
                 done-lines)))))
 
-(defmacro with-each-line ((str &key (offset 0) limit) &rest body)
-  `(with-input-from-string (s ,str)
-     (with-each-fline (s :offset ,offset :limit ,limit)
-       ,@body)))
-
 (defun gulplines (path-or-stream &key (offset 0) limit)
   "Gulps the whole provided file, URL or stream into an array of its lines, optionally starting at line <offset> and limiting output to <limit> lines. <offset> can be negative, in which case reading will start -<offset> lines from the end."
   (let ((lines nil))
     (with-each-fline (path-or-stream :offset offset :limit limit)
-      (nconc lines (list it)))
+      (pushend it lines))
     lines))
 
 (defun mapflines (fn path-or-stream &key  (offset 0) limit)
@@ -664,21 +642,21 @@
     lines))
 
 (defun grep (regexp path &key recursive matches-only names-only lines-only capture)
-  "Check <file-or-dir> for lines matching <regexp>, recursively if <recursive> is not nil.
+  "Check <path> for files lines matching <regexp>, recursively if <recursive>.
    By default, returns (filename line matches) for each line matching. If <capture> is 
    specified, only capture group <capture> will be returned in matches."
   (if (probe-dir path)
       (loop for file in (ls path :files-only t :recursive recursive)
-            nconc (grep regexp file :matches-only matches-only :names-only names-only :lines-only lines-only))
+            nconc (grep regexp file :matches-only matches-only :names-only names-only :lines-only lines-only :capture capture))
       (let ((result nil))
         (with-each-fline (path)
            (let ((matches (~ regexp it capture)))
               (when matches
                 (cond 
                   (matches-only (pushend matches result))
-                  (names-only   (pushendnew (ls path) result))
+                  (names-only   (pushendnew (probe-file path) result))
                   (lines-only   (pushend it result))
-                  (t            (pushend (list (ls path) @it matches) result))))))
+                  (t            (pushend (list (probe-file path) @it matches) result))))))
         result)))
 
 (defmacro with-temporary-file ((filename extension) &rest body)
@@ -780,7 +758,7 @@
                           (when (not files-only) dirs)
                           (when recursive
                              (mapcar [ls _ :recursive recursive :files-only files-only :dirs-only dirs-only] dirs)))))))
-      (if dirs-only nil (list path))))
+      (if dirs-only nil (list (probe-file path)))))
 
 (defun rm (path &key recursive)
   "Deletes file <path>, or entire directory <path> if <recursive>."
@@ -1067,14 +1045,16 @@
                (setf result a))))
     result)))
 
-(defun cl-store-serialize (obj)
-  (flexi-streams:with-output-to-sequence (s)
-    (cl-store:store obj s)))
+(defun serialize (obj)
+  #-abcl(flexi-streams:with-output-to-sequence (s)
+          (cl-store:store obj s))
+  #+abcl(prin1-to-string args))
 
 (defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last expire)
   "Returns a disk memoized version of function <fn>. If <remember-last> is specified, it will limit the number of remembered results. If <expire> is specified, it will limit the number of seconds a result is remembered for. <force-reset> causes results from previous sessions to be discarded. <prefix> can be used to customize the prefix of cache files, and <dir> to change the directory of these files.
   
   Warning : remember-last uses file write dates to determine call order. If the function takes less than a second to return, the order of forgetting calls is not guaranteed.
+    Arguments and results are limited to what can be serialized using cl-store. Function arguments or return values are out. cl-store does not work on ABCL yet, so use on abcl is limited.
   "
   (unless prefix
     (setf prefix (str "cl-arno-mem-" (~ "/\{([A-E0-9]+)\}/" (str fn) 1)))
@@ -1082,8 +1062,7 @@
   (when force-reset (sh (str "rm -f " dir "/" prefix "#*" )))
   #'(lambda (&rest args) 
       (let* ((time (ut))
-             (file (str dir "/" prefix "#" (sha256 #+abcl(prin1-to-string args)
-                                                   #-abcl(cl-store-serialize args))))
+             (file (str dir "/" prefix "#" (sha256 (serialize args))))
              (lock (str file ".lock")))
          (while (ls lock)
            (sleep 0.01))

@@ -44,6 +44,37 @@
     :expect "1 2 3 4"))
 
 
+(test-suite ("pushend / pushendnew")
+
+  (test "pushend"
+    (let ((l (list 1 2 3)))
+      (pushend 4 l)
+      l)
+    :expect (list 1 2 3 4))
+
+  (test "pushend 2"
+    (let ((l nil))
+      (pushend 4 l)
+      l)
+    :expect (list 4))
+
+  (test "pushendnew"
+    (let ((l (list 1 2 3)))
+      (pushendnew 4 l)
+      l)
+    :expect (list 1 2 3 4))
+
+  (test "pushendnew 2"
+    (let ((l nil))
+      (pushendnew 4 l)
+      l)
+    :expect (list 4))
+
+   (test "pushendnew 3"
+    (let ((l (list 1 2 3)))
+      (pushendnew 3 l)
+      l)
+    :expect (list 1 2 3)))
 
 (test-suite ("conversions")
 
@@ -246,9 +277,6 @@
 
 
 (test-suite ("compose")
-   (test "compose reader"
-     (car!list 2)
-     :expect 2)
 
    (test "compose function"
      (funcall (o #'floor #'+) 1 2.5)
@@ -664,13 +692,13 @@
        (grep "/b/" "/tmp/clutchtest/")
        :expect (list (list #p"/tmp/clutchtest/1" 2 (list "b"))
                      (list #p"/tmp/clutchtest/2" 1 (list "b"))
-                     (list #p"/tmp/clutchtest/3" 4 (list "b"))))
+                     (list #p"/tmp/clutchtest/3" 2 (list "b"))))
 
     (test "grep <regexp> <dir> recursive"
        (grep "/b/" "/tmp/clutchtest/" :recursive t)
        :expect (list (list #p"/tmp/clutchtest/1" 2 (list "b"))
                      (list #p"/tmp/clutchtest/2" 1 (list "b"))
-                     (list #p"/tmp/clutchtest/3" 4 (list "b"))
+                     (list #p"/tmp/clutchtest/3" 2 (list "b"))
                      (list #p"/tmp/clutchtest/subdir/1" 4 (list "b"))
                      (list #p"/tmp/clutchtest/subdir2/1" 3 (list "b"))))
 
@@ -683,20 +711,20 @@
                      #p"/tmp/clutchtest/subdir2/1"))
 
     (test "grep <regexp> <dir> recursive capture"
-       (grep "/(\\w)/" "/tmp/clutchtest/" :recursive t :capture 1)
-       :expect (list (list #p"/tmp/clutchtest/1" 2 (list "b" "b"))
-                     (list #p"/tmp/clutchtest/2" 1 (list "b" "b"))
-                     (list #p"/tmp/clutchtest/3" 4 (list "b" "b"))
-                     (list #p"/tmp/clutchtest/subdir/1" 4 (list "b" "b"))
-                     (list #p"/tmp/clutchtest/subdir2/1" 3 (list "b" "b"))))
+       (grep "/(b)/" "/tmp/clutchtest/" :recursive t :capture 1)
+       :expect (list (list #p"/tmp/clutchtest/1" 2 "b")
+                     (list #p"/tmp/clutchtest/2" 1 "b")
+                     (list #p"/tmp/clutchtest/3" 2 "b")
+                     (list #p"/tmp/clutchtest/subdir/1" 4 "b")
+                     (list #p"/tmp/clutchtest/subdir2/1" 3 "b")))
 
     (test "grep <regexp> <dir> recursive matches-only + capture"
        (grep "/(\\w)/" "/tmp/clutchtest/" :recursive t :matches-only t :capture 1)
-       :expect (list (list #p"/tmp/clutchtest/1" 2 (list "2" "2"))))
+       :expect (list "a" "b" "c" "d" "e" "b" "a" "c" "d" "e" "o" "b" "c" "d" "e" "o" "d" "c" "b" "e" "o" "c" "b" "d" "e"))
 
     (test "grep <regexp> <dir> recursive lines-only"
        (grep "/b/" "/tmp/clutchtest/" :recursive t :lines-only t)
-       :expect (list 2 1 4 4 3))
+       :expect (list "b" "b" "b" "b" "b"))
  )
 
      
@@ -774,13 +802,6 @@
         (mapflines #'identity "/tmp/clutchtest"
            :offset -3
            :limit 2))
-     :expect (list "c" "d"))
-
-   (test "with-each-line string"
-     (let ((result nil))
-       (with-each-line ("a\nb\nc\nd\ne" :offset -3 :limit 2)
-         (push it result))
-       result)
      :expect (list "c" "d"))
    )
 

@@ -32,7 +32,7 @@
   :depends-on (:cl-ppcre
                :ironclad
                :uuid
-               :flexi-streams
+               #-abcl :flexi-streams
                #-abcl :cl-store
                #-abcl :drakma
                #+sbcl :sb-posix
