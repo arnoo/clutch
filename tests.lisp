@@ -68,7 +68,7 @@
     (let ((l nil))
       (pushendnew 4 l)
       l)
-    :expect (list 4))
+    :expect (list  4))
 
    (test "pushendnew 3"
     (let ((l (list 1 2 3)))
@@ -368,7 +368,7 @@
     (test "mkdir / probe-dir"
        (progn (mkdir "/tmp/clutchtest")
               (probe-dir "/tmp/clutchtest"))
-       :expect-type 'pathname
+       :expect #p"/tmp/clutchtest/"
        :fatal t)
 
     (test "rmdir"
