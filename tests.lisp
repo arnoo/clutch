@@ -355,16 +355,46 @@
        (~ "/(\\s|^)(\\w+\\/\\w+)(;|$)/" "image/jpeg;aa")
        :expect '("image/jpeg;" "" "image/jpeg" ";"))
   
+    (test "Regexp filter other types"
+       (~ "/\\d/" (list #p"a" #p"a1" "b" "2"))
+       :expect '(#p"a1" "2"))
+  
+    (test "Regexp filter reverse other types"
+       (/~ "/\\d/" (list #p"a" #p"a1" "b" "2"))
+       :expect '(#p"a" "b"))
+
     (test "Regexp filter"
        (~ "/\\d/" (list "a" "a1" "b" "2"))
        :expect '("a1" "2"))
   
     (test "Regexp filter capturing single match"
        (~ "/\\w(\\d)/" (list "a" "a1" "b" "2") 1)
-       :expect '("1")))
+       :expect '("1"))
+    
+    (test "Regexp filter reverse"
+       (/~ "/\\d/" (list "a" "a1" "b" "2"))
+       :expect '("a" "b"))
+   
+    (test "Regexp match reverse"
+       (/~ "/\\d/" "a1")
+       :expect nil)
+ 
+    (test "Regexp match reverse 2"
+           (/~ "/\\d/" "a")
+           :expect t)
+    )
 
 
-(test-suite ("rm / probe-dir / mkdir / rmdir")
+(test-suite ("Filesystem interactions")
+
+    (test "ls non existing file"
+      (ls "adfakjhoqiuyerhkljlaskdj.sssaapoiu442223")
+      :expect nil)
+    
+    (test "ls existing file"
+      (car (ls "clutch.lisp"))
+      :expect-type 'pathname)
+
     (test "mkdir / probe-dir"
        (progn (mkdir "/tmp/clutchtest")
               (probe-dir "/tmp/clutchtest"))
@@ -447,75 +477,74 @@
             (let ((a 0))
                (awith (memoize [+ _ a] :remember-last 3)
                  {it 0}
-                 (setf a 1)
                  {it 1}
+                 (setf a 1)
                  {it 2}
                  {it 3}
-                 {it 0}))
-            :expect 1)
+                 (list {it 0} {it 1})))
+            :expect (list 1 2))
     )
 
 
-;(test-suite ("memoize to disk")
-;
-;  (test "memoize-to-disk 1"
-;      (let ((a 0))
-;         (awith (memoize-to-disk [+ _ a])
-;           {it 0}
-;           (setf a 1)
-;           {it 0}))
-;      :expect 0)
-;
-;  (test "memoize-to-disk 2"
-;          (let ((a 0))
-;             (awith (memoize-to-disk [+ _ a] :remember-last 1)
-;               {it 0}
-;               (setf a 1)
-;               {it 1}
-;               {it 0}))
-;          :expect 1)
-;
-;  (test "memoize-to-disk 3"
-;          (let ((a 0))
-;             (awith (memoize-to-disk [+ _ a] :expire 1)
-;               {it 0}
-;               (setf a 1)
-;               (sleep 2)
-;               {it 0}))
-;          :expect 1)
-;
-;  (test "memoize-to-disk 4"
-;          (let ((a 0))
-;             (awith (memoize-to-disk [+ _ a] :remember-last 1 :expire 10)
-;               {it 0}
-;               (setf a 1)
-;               {it 1}
-;               {it 0}))
-;          :expect 1)
-;
-;  (test "memoize-to-disk 5"
-;          (let ((a 0))
-;             (awith (memoize-to-disk [+ _ a] :remember-last 3)
-;               {it 0}
-;               (setf a 1)
-;               {it 1}
-;               {it 2}
-;               {it 3}
-;               {it 0}))
-;          :expect 1)
-;
-;  (test "memoize-to-disk 6"
-;          (let ((a 0))
-;             (awith (memoize-to-disk [+ _ a] :remember-last 3)
-;               {it 0}
-;               {it 1}
-;               {it 2}
-;               {it 3}
-;               (setf a 1)
-;               {it 3}))
-;          :expect 3)
-;
-;  )
+(test-suite ("memoize to disk")
+
+  (test "memoize-to-disk 1"
+      (let ((a 0))
+         (awith (memoize-to-disk [+ _ a])
+           {it 0}
+           (setf a 1)
+           {it 0}))
+      :expect 0)
+
+  (test "memoize-to-disk 2"
+          (let ((a 0))
+             (awith (memoize-to-disk [progn (sleep 1) (+ _ a)] :remember-last 1)
+               {it 0}
+               (setf a 1)
+               (list {it 1} {it 0})))
+          :expect (list 2 1))
+
+  (test "memoize-to-disk 3"
+          (let ((a 0))
+             (awith (memoize-to-disk [+ _ a] :expire 1)
+               {it 0}
+               (setf a 1)
+               (sleep 2)
+               {it 0}))
+          :expect 1)
+
+  (test "memoize-to-disk 4"
+          (let ((a 0))
+             (awith (memoize-to-disk [progn (sleep 1) (+ _ a)] :remember-last 1 :expire 10)
+               {it 0}
+               (setf a 1)
+               {it 1}
+               {it 0}))
+          :expect 1)
+
+  (test "memoize-to-disk 5"
+          (let ((a 0))
+             (awith (memoize-to-disk [progn (sleep 1) (+ _ a)] :remember-last 3)
+               {it 0}
+               (setf a 1)
+               {it 1}
+               {it 2}
+               {it 3}
+               {it 0}))
+          :expect 1)
+
+  (test "memoize-to-disk 6"
+          (let ((a 0))
+             (awith (memoize-to-disk [progn (sleep 1) (+ _ a)] :remember-last 3)
+               {it 0}
+               {it 1}
+               {it 2}
+               {it 3}
+               (setf a 1)
+               {it 3}))
+          :expect 3)
+
+  )
 
 
 (test-suite ("time and date")

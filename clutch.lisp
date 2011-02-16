@@ -265,36 +265,31 @@
 ;
 
 (defmacro awith (form &body body)
-  "Executes <body> with <it> bound to <form>"
+  "Evaluates <body> with <it> bound to <form>"
 	`(let ((it ,form)) ,@body))
 
 (defmacro aif (test then &optional else)
-  "Executes <then with <it> bound to result of evaluating <test> if this result is not nil, <else> otherwise"
+  "Evaluates <then with <it> bound to result of evaluating <test> if this result is not nil, <else> otherwise"
   `(awith ,test
      (if it
          ,then
          ,else)))
 
 (defmacro if-bind ((var test) then &optional else)
-  "Executes <then with <var> bound to result of evaluating <test> if this result is not nil, <else> otherwise"
+  "Evaluates <then with <var> bound to result of evaluating <test> if this result is not nil, <else> otherwise"
   `(let ((,var ,test))
      (if ,var
          ,then
          ,else)))
- 
-(defmacro aunless (test &body body)
-  "Executes <body> with <it> bound to result of evaluating <test> if this result is nil"
-  `(awith ,test
-     (unless it ,@body)))
 
 (defmacro awhen (test &body body)
-  "Executes <body> with <it> bound to result of evaluating <test> if this result is not nil"
+  "Evaluates <body> with <it> bound to result of evaluating <test> if this result is not nil"
   `(awith ,test
      (when it
            ,@body)))
 
 (defmacro when-bind ((var test) &body body)
-  "Executes <body> with <var> bound to result of evaluating <test> if this result is not nil"
+  "Evaluates <body> with <var> bound to result of evaluating <test> if this result is not nil"
   `(let ((,var ,test))
      (when ,var
            ,@body)))
@@ -370,13 +365,16 @@
   (multiple-value-bind (regexp subre flags) (parse-re re)
     (declare (ignorable subre))
     (let ((result nil))
-      (cl-ppcre:do-matches (match-start match-end regexp string-or-list result)
+      (cl-ppcre:do-matches (match-start match-end regexp (str string-or-list) result)
         (pushend (funcall (aif capture-nb [_ it] #'identity)
-                    (awith (multiple-value-list (cl-ppcre:scan-to-strings regexp string-or-list :start match-start :end match-end))
+                    (awith (multiple-value-list (cl-ppcre:scan-to-strings regexp (str string-or-list) :start match-start :end match-end))
                       (cons (car it) (vector-to-list* (cadr it)))))
                  result)
         (when (and result (not (in flags #\g)))
           (return (car result)))))))
+
+(defmethod ~ ((re string) (string-or-list pathname) &optional capture-nb)
+  (~ re (str string-or-list) capture-nb))
 
 (defmethod ~ ((re string) (string-or-list list) &optional capture-nb)
   "returns the elements of list that match <re>
@@ -384,7 +382,9 @@
    Specify a <capture-nb> value to return capture number <capture-nb> instead of the string that matches.
 
    example : (re \"\w+(\d)\" \"ab2cc\")"
-  (let ((matching (remove-if-not [cl-ppcre:do-matches (a b (parse-re re) _) (return t)]
+  (let ((matching (remove-if-not [progn (unless (or (stringp _) (pathnamep _))
+                                           (error "Element of list for ~~ cannot be assimilated to a string : ~A" _))
+                                        (cl-ppcre:do-matches (a b (parse-re re) (str _)) (return t))]
                                  string-or-list)))
        (if capture-nb
            (mapcar [~ re _ capture-nb] matching)
@@ -395,15 +395,16 @@
 (defmethod /~ ((re string) (obj string))
   "Returns nil if <re> matches string obj
    returns the string if <re> does not match"
-  (if (cl-ppcre::scan (parse-re re) obj)
-      nil
-      obj))
+  (cl-ppcre:do-matches (a b (parse-re re) obj t) (return nil)))
 
 (defmethod /~ ((re string) (obj list))
   "Returns the elements of list <obj> that do not match <re>
     example: (/~ \"\w{3}\" (list \"aaa\" \"bb\" \"ccc\"))"
-  (remove-if [cl-ppcre::scan (parse-re re) _]
+  (remove-if-not [/~ re _]
              obj))
+
+(defmethod /~ ((re string) (obj pathname))
+  (/~ re (str obj)))
 
 (defgeneric ~s (re obj &optional capture-nb))
 
@@ -418,6 +419,9 @@
           (cl-ppcre::regex-replace-all regexp obj subre)
           (cl-ppcre::regex-replace     regexp obj subre))
         matches))))
+
+(defmethod ~s ((re string) (obj pathname) &optional capture-nb)
+  (~s re (str obj) capture-nb))
 
 (defmethod ~s ((re string) (obj list) &optional capture-nb)
   (mapcar [~s re _ capture-nb] obj))
@@ -585,7 +589,7 @@
 
 (defmacro with-each-fline ((path-or-stream &key (offset 0) limit) &rest body)
   "<args> should look like (path-or-stream &key (offset 0) limit)
-   Executes <body> for each line in <path-or-stream>, with the line
+   Evaluates <body> for each line in <path-or-stream>, with the line
    available as <it>, and the line number as <@it>."
     `(block read-loop
         (let ((offset ,offset)
@@ -597,7 +601,7 @@
             ; we have to read the whole thing
             (let ((done-lines 0)
                   (@it offset))
-              (loop for it in {(resplit "/\\n/" (gulp ,path-or-stream)) offset (+ offset limit -1)}
+              (loop for it in {(lines (gulp ,path-or-stream)) offset (+ offset limit -1)}
                     do ,@body
                        (incf @it)
                        (incf done-lines))
@@ -660,7 +664,7 @@
         result)))
 
 (defmacro with-temporary-file ((filename extension) &rest body)
-  "Executes <body> with a temporary file. <filename> is the variable you want to assign the filename to, and <extension> the extension you want the temporary file to have."
+  "Evaluates <body> with a temporary file. <filename> is the variable you want to assign the filename to, and <extension> the extension you want the temporary file to have."
   `(let ((,filename (str "/tmp/highres_" (get-internal-real-time) (random 100) "." ,extension)))
       (prog1
          (progn
@@ -758,7 +762,9 @@
                           (when (not files-only) dirs)
                           (when recursive
                              (mapcar [ls _ :recursive recursive :files-only files-only :dirs-only dirs-only] dirs)))))))
-      (if dirs-only nil (list (probe-file path)))))
+      (if dirs-only
+          nil
+          (aif (probe-file path) (list it) nil))))
 
 (defun rm (path &key recursive)
   "Deletes file <path>, or entire directory <path> if <recursive>."
@@ -778,13 +784,15 @@
 
 (defun mkdir (dir)
   "Creates directory <dir>"
-  (ensure-directories-exist (make-pathname :directory dir)))
+  (awith (make-pathname :directory dir)
+    (ensure-directories-exist it)
+    it))
 
 (defun rmdir (dir)
   "Deletes directory <dir> if it is empty, signals an error otherwise."
   (if (ls dir)
     (error "Directory '~A' is not empty" dir))
-    #+:sbcl(sb-posix:rmdir dir)
+    #+:sbcl(progn (sb-posix:rmdir dir) t)
     #+:abcl(delete-file dir)
     #-(or :abcl :sbcl) (error "Not implemented"))
 
@@ -1048,7 +1056,19 @@
 (defun serialize (obj)
   #-abcl(flexi-streams:with-output-to-sequence (s)
           (cl-store:store obj s))
-  #+abcl(prin1-to-string args))
+  #+abcl(prin1-to-string obj))
+
+(defun rm-oldest-files (dir regexp keep-nb)
+    (let ((files (~ regexp (ls dir))))
+       (when (> (length files) keep-nb)
+         (awith (sort files [f< #'file-write-date _ __])
+           (while (> (length it) keep-nb)
+             (rm (pop it)))))))
+
+(defun rm-files-older-than (dir regexp time)
+  (loop for f in (~ regexp (ls dir))
+        do (when (< (file-write-date f) time)
+              (rm f))))
 
 (defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last expire)
   "Returns a disk memoized version of function <fn>. If <remember-last> is specified, it will limit the number of remembered results. If <expire> is specified, it will limit the number of seconds a result is remembered for. <force-reset> causes results from previous sessions to be discarded. <prefix> can be used to customize the prefix of cache files, and <dir> to change the directory of these files.
@@ -1057,33 +1077,36 @@
     Arguments and results are limited to what can be serialized using cl-store. Function arguments or return values are out. cl-store does not work on ABCL yet, so use on abcl is limited.
   "
   (unless prefix
-    (setf prefix (str "cl-arno-mem-" (~ "/\{([A-E0-9]+)\}/" (str fn) 1)))
+    (setf prefix (str "clutch-mem-" (~ "/\{([A-E0-9]+)\}/" (str fn) 1))) ; TODO: no good (find a persistent name)
     (setf force-reset t))
-  (when force-reset (sh (str "rm -f " dir "/" prefix "#*" )))
-  #'(lambda (&rest args) 
-      (let* ((time (ut))
-             (file (str dir "/" prefix "#" (sha256 (serialize args))))
-             (lock (str file ".lock")))
-         (while (ls lock)
-           (sleep 0.01))
-         (when expire
-           (loop for f in (~ (str "/\\/" prefix "#[^\\/]+/") (ls dir))
-             do (when (> (- time (file-write-date f)) expire)
-                  (rm f))))
-         (if (ls file)
-             (read-from-string (gulp file))
-             (awith (apply fn args)
-                (ungulp lock "")
-                (unwind-protect
-                  (progn
-                    (when remember-last
-                      (awith (~ (str "/\\/" prefix "#[^\\/]+/") (ls dir))
-                        (when (>= (length it) remember-last)
-                           (rm (first (sort it [> (file-write-date _) (file-write-date __)]))))))
-                    #+abcl(ungulp file it :readable t)
-                    #-abcl(cl-store:store file it))
-                  (rm lock))
-                it)))))
+  (let ((fre (str "/\\/" prefix "#[^\\/]+$/")))
+    (when force-reset (mapcar #'rm (~ fre (ls dir))))
+    #'(lambda (&rest args) 
+        (let ((file (str dir "/" prefix "#" (sha256 (serialize args)))))
+           (when expire
+             (rm-files-older-than dir fre (ut)))
+           (when remember-last
+             (rm-oldest-files dir fre remember-last))
+           (if (ls file)
+               (progn #+abcl(read-from-string (gulp file)) #-abcl(cl-store:restore file))
+               (progn
+                  (when remember-last
+                    (rm-oldest-files dir fre (- remember-last 1)))
+                  (awith (apply fn args)
+                    #+abcl(ungulp file it :readable t) #-abcl(cl-store:store it file)
+                    it)))))))
+
+(defun rm-oldest-entries (hash keep-nb)
+  (if (>= (hash-table-count hash) keep-nb)
+    (awith (sort (keys hash) [or (f< #'cadr  {hash _} {hash __})
+                                 (f< #'caddr {hash _} {hash __})])
+      (while (> (length it) keep-nb)
+         (remhash (pop it) hash)))))
+
+(defun rm-entries-older-than (hash time)
+  (loop for call in (keys hash)
+        do (when (< (cadr {hash call}) time)
+             (remhash call hash))))
 
 (defun memoize (fn &key remember-last expire)
   "Returns a memoized version of function <fn>. If <remember-last> is specified, it will limit the number of remembered results. If <expire> is specified, it will limit the number of seconds a result is remembered for."
@@ -1092,11 +1115,9 @@
      #'(lambda (&rest args)
           (let ((utc (ut)))
             (when expire
-               (loop with time = utc
-                     for call in (keys cache)
-                     do (when (> (cadr {cache call}) expire)
-                           (remhash call cache))))
+               (rm-entries-older-than cache (- utc expire)))
             (when remember-last
+               (rm-oldest-entries cache remember-last)
                (incf cycle)
                (when (= cycle most-positive-fixnum) (setf cycle 0)))
             (multiple-value-bind (val hit) (gethash args cache)
@@ -1106,14 +1127,11 @@
                        (setf {cache args} (list (car val) utc cycle)))
                     (caddr val))
                   (progn
-                    (when (and remember-last
-                               (>= (hash-table-count cache) remember-last))
-                       (awith (first (sort (keys cache) [or (> (cadr {cache _}) (cadr {cache __}))
-                                                            (> (caddr {cache _}) (caddr {cache __}))]))
-                         (remhash it cache)))
+                    (when remember-last
+                         (rm-oldest-entries cache (- remember-last 1)))
                     (apply #'values 
                       (setf {cache args}
-                            (list (apply fn args) (ut) cycle))))))))))
+                            (list (apply fn args) utc cycle))))))))))
 
 (defmacro before (fn &rest body)
   "Redefines <fn> so that <body> gets executed first each time <fn> is called. <body> can access the arguments passed to fn through variable <args>. Will not work with inlined functions.
@@ -1142,18 +1160,3 @@
                (lambda (&rest args)
                  (prog1 (apply ,sym args)
                         ,@body)))))))
-
-(defun file-repl (file)
-  "Watches file for additions, and evals the additions.
-   I use it to send forms from Vim to the REPL.
-   At the end, I have a full log of my session in the file."
-  (let ((offset 0)
-        (form nil))
-    (loop do (sleep 1)
-             (setf form nil)
-             (with-open-file (f file)
-                (file-position f offset)
-                (loop until (eq form 'EOF)
-                      do (setf form (read f nil 'EOF))
-                         (unless (eq form 'EOF) (eval form)))
-                (setf offset (file-position f))))))
