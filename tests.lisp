@@ -435,6 +435,62 @@
        :fatal t)
   )
 
+(test-suite ("ls"
+             :setup (progn (mkdir "/tmp/clutchtest")
+                           (ungulp "/tmp/clutchtest/1" (format nil "a~%b~%c~%d~%e~%") :if-exists :overwrite)
+                           (ungulp "/tmp/clutchtest/2" (format nil "b~%a~%c~%d~%e~%") :if-exists :overwrite)
+                           (ungulp "/tmp/clutchtest/3" (format nil "o~%b~%c~%d~%e~%") :if-exists :overwrite)
+                           (mkdir "/tmp/clutchtest/subdir")
+                           (ungulp "/tmp/clutchtest/subdir/1" (format nil "o~%d~%c~%b~%e~%") :if-exists :overwrite)
+                           (mkdir "/tmp/clutchtest/subdir2")
+                           (ungulp "/tmp/clutchtest/subdir2/1" (format nil "o~%c~%b~%d~%e~%") :if-exists :overwrite))
+             :teardown (rm "/tmp/clutchtest" :recursive t))
+
+    (test "ls"
+       (ls "/tmp/clutchtest")
+       :expect (list #p"/tmp/clutchtest/1" #p"/tmp/clutchtest/2" #p"/tmp/clutchtest/3" #p"/tmp/clutchtest/subdir/" #p"/tmp/clutchtest/subdir2/"))
+
+    (test "ls files-only"
+       (ls "/tmp/clutchtest" :files-only t)
+       :expect (list #p"/tmp/clutchtest/1" #p"/tmp/clutchtest/2" #p"/tmp/clutchtest/3"))
+
+    (test "ls dirs-only"
+       (ls "/tmp/clutchtest" :dirs-only t)
+       :expect (list #p"/tmp/clutchtest/subdir/" #p"/tmp/clutchtest/subdir2/"))
+
+    (test "ls recursive"
+       (ls "/tmp/clutchtest" :recursive t)
+       :expect (list #p"/tmp/clutchtest/1" #p"/tmp/clutchtest/2" #p"/tmp/clutchtest/3" #p"/tmp/clutchtest/subdir/" #p"/tmp/clutchtest/subdir2/" #p"/tmp/clutchtest/subdir/1" #p"/tmp/clutchtest/subdir2/1"))
+
+    (test "ls recursive files-only"
+       (ls "/tmp/clutchtest" :recursive t :files-only t)
+       :expect (list #p"/tmp/clutchtest/1" #p"/tmp/clutchtest/2" #p"/tmp/clutchtest/3" #p"/tmp/clutchtest/subdir/1" #p"/tmp/clutchtest/subdir2/1"))
+
+    (test "ls recursive dirs-only"
+       (ls "/tmp/clutchtest" :recursive t :dirs-only t)
+       :expect (list #p"/tmp/clutchtest/subdir/" #p"/tmp/clutchtest/subdir2/"))
+
+    (test "ls single file"
+       (ls "/tmp/clutchtest/1")
+       :expect (list #p"/tmp/clutchtest/1"))
+
+    (test "ls non existing file"
+       (ls "/tmp/clutchtest/1afadslkjwer")
+       :expect nil)
+
+    (test "ls single file recursive"
+       (ls "/tmp/clutchtest/1" :recursive t)
+       :expect (list #p"/tmp/clutchtest/1"))
+
+    (test "ls single file dirs-only"
+       (ls "/tmp/clutchtest/1" :dirs-only t)
+       :expect nil)
+
+    (test "ls single file files-only"
+       (ls "/tmp/clutchtest/1" :files-only t)
+       :expect (list #p"/tmp/clutchtest/1"))
+)
+
 
 (test-suite ("memoize")
 
