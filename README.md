@@ -12,7 +12,7 @@ There is a test suite (tests.lisp), based on my test library (cleanser), that sh
 Some date functions rely on the GNU 'date' program. While a bit ugly and non-portable, this works well enough for my purposes right now, and would be too complex to rewrite.
 
 
-There are two main reader macros , {} and [].
+There are two main reader macros : {} and [].
 
 The first is used to access data structures :
 > {"abc" 1} 
@@ -22,7 +22,7 @@ The first is used to access data structures :
 > {"abc" 1 -1}
 "bc"
 > {(list 1 2 3) 1 -1}
-(list 2 3)
+(2 3)
 > {some-struct-or-object 'a}
 <value of slot a>
 
@@ -41,11 +41,11 @@ Except lambda, these forms can also be used with setf :
 
 [] is used for anonymous functions and is supposed to work like in Arc :
 > (mapcar [+ 1 _] (list 1 2))
-(list 2 3)
+(2 3)
 
 It can also be used with structures in a functional position like this (and then uses the same accessor function as {})
 > (mapcar [_ 2] (list "abc" "def"))
-(list #\c #\f)
+(#\c #\f)
 
 
 Memoization
@@ -68,6 +68,7 @@ gulp is a function to read a file or stream in one go and return a string :
 will return a string with the contents of file /var/log/messages
 
 Say I want to read only a part of the file, I could use the keyword parameters <offset> and <limit> :
+
 > (gulp "/var/log/messages" :offset 20)
 Will read the whole file starting at character 20
 
@@ -87,9 +88,10 @@ If working on a large file, I probably don't want to load it all in memory, so I
 I can use the same <offset> and <limit> parameters there :
 > (with-each-line ("/var/log/messages" :offset -20 :limit 10) (print it))
 
-All these functions accept a stream instead of a filename, or a URL :
+All of these functions accept a stream instead of a filename, or a URL :
 > (with-each-line ("http://www.google.com") (print it))
 > (gulp "http://www.google.com")
+
 
 Stack manipulation
 ------------------
@@ -98,14 +100,19 @@ pushend, pushendnew and popend act like push, pushnew and pop but with the end o
 
 > (setf lst (list 1 2 3))
 (1 2 3)
+
 > (pushend 4 l)
 (1 2 3 4)
+
 > (pushendnew 4 l)
 (1 2 3 4)
+
 > (popend l)
 4
+
 > l
 (1 2 3)
+
 > (pushendnew 4 l)
 (1 2 3 4)
 
@@ -113,7 +120,7 @@ pushend, pushendnew and popend act like push, pushnew and pop but with the end o
 Anaphoric macros
 ----------------
 
-inspired by Onlisp
+Theses are inspired by Paul Graham's book "On Lisp".
 
 awith (form &rest body)
 Evaluates <body> with <it> bound to <form>.
@@ -131,11 +138,12 @@ Loops on <body> with <it> bound to result of evaluating <test> as long as this r
 > (awhile a (print it) (print "a is not nil"))
 
 aand (test &rest tests)
- ###
+> (aand (list 1 2) (cdr it))
+2
 
 acond (&rest forms)
 Like a regular cond, except the result of evaluating the condition form can be accessed as <it>.
- ### 
+
 
 Regular expressions
 -------------------
@@ -145,11 +153,11 @@ Unfortunately, backspaces have to be escaped. Maybe a clever reader macro could 
 
 Filter a list : keep only elements that match the regexp :
 > (~ "/\\w{3}/" (list "abc" "def" "ac"))
-(list "abc" "def")
+("abc" "def")
 
 Filter a list : keep only elements that don't match the regexp :
 > (/~ "/\\w{3}/" (list "abc" "def" "ac"))
-(list "ac")
+("ac")
 
 Check whether a string matches a regexp :
 > (~ "/\\w{3}/" "ac")
@@ -173,18 +181,41 @@ Check whether a string matches a regexp (reversed) :
 t
 
 Do a regexp based substitution :
-> (~s 
+> (~s "/b/a/" "bob")
+"aob"
 
-List all the lines that match regexp in <file> :
-> (grep "/
+Globally :
+> (~s "/b/a/g" "bob")
+"aoa"
 
-List all the lines that match regexp in <dir>, recursively :
+List all the lines that match regexp in a file :
+> (grep "/\\[EE\\]/" "/var/log/Xorg.0.log")
+((#P"/var/log/Xorg.0.log" 6 ("EE")) (#P"/var/log/Xorg.0.log" 15 ("EE"))
+ (#P"/var/log/Xorg.0.log" 52 ("EE")) (#P"/var/log/Xorg.0.log" 111 ("EE")))
+
+Each element in the list returned has the form (<filename> <line number> <result of ~>).
+
+List all the lines that match regexp in directory, only first level :
+> (grep "/\\[EE\\]/" "/var/log/")
+((#P"/var/log/Xorg.0.log" 6 ("EE")) (#P"/var/log/Xorg.0.log" 15 ("EE"))
+ (#P"/var/log/Xorg.0.log" 52 ("EE")) (#P"/var/log/Xorg.0.log" 111 ("EE")))
+
+List all the lines that match regexp in directory, recursively :
+> (grep "/\\[EE\\]/" "/var/log/" :recursive t)
+((#P"/var/log/Xorg.0.log" 6 ("EE")) (#P"/var/log/Xorg.0.log" 15 ("EE"))
+ (#P"/var/log/Xorg.0.log" 52 ("EE")) (#P"/var/log/Xorg.0.log" 111 ("EE")))
 
 Return only the matches :
+> (grep "/EE/" "/var/log/Xorg.0.log" :matches-only t)
+(("EE") ("EE") ("EE") ("EE"))
 
 Return only the filenames :
+> (grep "/EE/" "/var/log/Xorg.0.log" :names-only t)
+(#P"/var/log/Xorg.0.log")
 
 Return only the first capture :
+> (grep "/(EE)/" "/var/log/Xorg.0.log" :matches-only t :capture 1)
+("EE" "EE" "EE" "EE")
 
 
 Other Filesystem interactions
@@ -286,7 +317,7 @@ Creating a date from a Common Lisp universal time :
 #S(DATE :S 35 :M 4 :H 8 :DOW 3 :DAY 17 :MONTH 2 :YEAR 2011 :DST NIL :ZONE -1)
 
 Creating a date from a "military time" (today) :
-> (date :miltime "2302)
+> (date :miltime 2302)
 #S(DATE :S 0 :M 02 :H 23 :DOW 3 :DAY 17 :MONTH 2 :YEAR 2011 :DST NIL :ZONE -1)
 
 Creating a date from a string :
@@ -295,17 +326,22 @@ Creating a date from a string :
 
 Date structures can be compared with with d>, d<, d>=, d<=, d=, and d/=.
 
-The time in seconds between to dates can be obtained with d-delta :
+The time in seconds between two dates can be obtained with d-delta :
 > (d-delta date1 date2)
 10
 
-> (miltime
+The "military" time (hours\*100+minutes). I have added seconds/100 for precision :
+> (miltime (date :ut 3506915075))
+804.35
 
-> (date-wom
+The week of the month :
+> (date-wom (date :ut 3506915075))
+3
 
-> (date-week
+The week of the year :
+> (date-week (date :ut 3506915075))
 
-> (y-m-d
+> (y-m-d (date :ut 3506915075))
 
 Get a Common-Lisp universal time (equivalent to get-universal-time)
 > (ut)

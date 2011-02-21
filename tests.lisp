@@ -44,7 +44,7 @@
     :expect "1 2 3 4"))
 
 
-(test-suite ("pushend / pushendnew")
+(test-suite ("pushend / pushendnew / popend")
 
   (test "pushend"
     (let ((l (list 1 2 3)))
@@ -74,7 +74,14 @@
     (let ((l (list 1 2 3)))
       (pushendnew 3 l)
       l)
-    :expect (list 1 2 3)))
+    :expect (list 1 2 3))
+
+  (test "popend"
+    (let ((l (list 1 2 3)))
+      (list (popend l) l))
+    :expect (list 3 (list 1 2)))
+   
+   )
 
 (test-suite ("conversions")
 
@@ -95,6 +102,41 @@
   (test "str (list (list 1 2 3) 2)"
     (str (list (list 1 2 3) 2))
     :expect "1232"))
+
+(test-suite ("string manipulation")
+
+    (test "uc"
+      (uc "bAc123")
+      :expect "BAC123")
+
+    (test "lc"
+      (lc "BaC123")
+      :expect "bac123")
+
+    (test "lpad"
+      (lpad "abc" 6)
+      :expect "   abc")
+
+    (test "lpad with"
+      (lpad "ab" 6 :with "c")
+      :expect "ccccab")
+
+    (test "rpad"
+      (rpad "rs" 3)
+      :expect "rs ")
+
+    (test "rpad with"
+      (rpad "rs" 5 :with "g")
+      :expect "rsggg")
+
+    (test "strip"
+      (strip "asbd")
+      :expect "asbd")
+
+    (test "strip 2"
+      (strip "\\n asbd \\n\\r\\n ")
+      :expect "asbd")
+)
 
 
 (test-suite ("anaphoric macros")
@@ -380,8 +422,12 @@
        :expect nil)
  
     (test "Regexp match reverse 2"
-           (/~ "/\\d/" "a")
-           :expect t)
+       (/~ "/\\d/" "a")
+       :expect t)
+
+    (test "resplit"
+       (resplit "/\\d/" "a1b2c3d4")
+       :expect (list "a" "b" "c" "d"))
     )
 
 
@@ -612,9 +658,9 @@
          (ut "now")
          :expect (get-universal-time))
    
-       (test "ut January 22 1964 23:12"
-         (ut "January 22 1964 23:12")
-         :expect (encode-universal-time 0 12 23 22  1 1964 -1))
+       (test "ut January 22 1964 23:12 +0200"
+         (ut "January 22 1964 23:12 +0200")
+         :expect (encode-universal-time 0 12 23 22  1 1964 2))
    
        (test "ut (date)"
          (ut (date))
@@ -622,11 +668,15 @@
    
        (test "ut (date :str \"now\")"
          (ut (date :str "now"))
-         :expect  (get-universal-time))
+         :expect (get-universal-time))
 
        (test "ut (date :miltime 1245)"
          (ut (date :miltime 1245))
          :expect (ut (date :str "12:45")))
+
+       (test "miltime"
+         (miltime (date :ut 3506915075))
+         :expect 804.35)
    
        (test "date-week (date January 22 1964 23:12)"
          (date-week (date :str "January 22 1964 23:12"))
@@ -637,7 +687,7 @@
          :expect 4)
    
        (test "ut (date January 22 1964 23:12)"
-         (ut (date :str "January 22 1964 23:12"))
+         (ut (date :str "January 22 1964 23:12" :zone 2))
          :expect (encode-universal-time 0 12 23 22  1 1964 -1))
    
        (test "d<"
@@ -686,8 +736,120 @@
          (d-delta (date :str "January 24 1964 23:12")
                   (date :str "January 24 1964 22:12"))
          :expect 3600)
+
+       (test "y-m-d"
+         (y-m-d (date :str "March 1 1964"))
+         :expect "1964-03-01")
+
+       (test "date-gnu"
+         (date-gnu (date :str "June 24 1999 22:12" :zone 2) "%s")
+         :expect "930265920")
+
+       (test "date-rfc-2822"
+         (date-rfc-2822 (date :str "June 24 1992 22:12" :zone 2))
+         :expect "Wed, 24 Jun 1992 22:12:00 +0200")
+
+       (test "d+"
+         (d+ (date :str "January 24 1964 23:12") (* 60 22))
+         :expect (date :str "January 24 1964 23:34")
+         :test #'d=)
+
+       (test "d<="
+         (d<= (date :str "December 24 1954 23:12") (date :str "January 14 1924 23:12"))
+         :expect nil)
+
+       (test "d<= 2"
+         (d<= (date :str "February 14 1924 23:12") (date :str "December 24 1954 23:12"))
+         :expect t)
+
+       (test "d<= 3"
+         (d<= (date :str "December 24 1954 23:12") (date :str "December 24 1954 23:12"))
+         :expect t)
+
+       (test "d>="
+         (d>= (date :str "January 24 1964 23:12") (date :str "July 11 1924 23:12"))
+         :expect t)
+
+       (test "d>= 2"
+         (d>= (date :str "July 11 1924 23:12") (date :str "January 24 1964 23:12"))
+         :expect nil)
+
+       (test "d>= 3"
+         (d>= (date :str "January 24 1964 23:12") (date :str "January 24 1964 23:12"))
+         :expect t)
+
+       (test "decode-duration"
+         (decode-duration "22s")
+         :expect 22)
+
+       (test "decode-duration 2"
+         (decode-duration "1y 2M 3w 5d 4h 5m 22s")
+         :expect (+ 22 (* 5 60) (* 4 3600) (* 5 3600 24) (* 3 3600 24 7) (* 3600 24 365) (* 2 3600 24 30)))
+
+       (test "encode-duration"
+         (encode-duration 22)
+         :expect "22s")
+
+       (test "encode-duration 2"
+         (awith (+ 22 (* 5 60) (* 4 3600) (* 5 3600 24) (* 3 3600 24 7) (* 3600 24 365) (* 2 3600 24 30))
+           (decode-duration (encode-duration it))
+           :expect it))
+
+       (test "to-zone"
+         (let ((d (date :str "January 24 1964 23:12" :zone 2)))
+            (d- (to-zone d 3) d))
+         :expect 3600)
        )
 
+(test-suite ("f= f> f< ...")
+      (test "f="
+        (f= #'sin 1 1)
+        :expect t)
+      (test "f= 2"
+        (f= #'sin 1 2)
+        :expect nil)
+      (test "f-equal"
+        (f-equal #'length "a" "b")
+        :expect t)
+      (test "f-equal 2"
+        (f-equal #'length "aa" "b")
+        :expect nil)
+      (test "f>"
+        (f> #'sin 2 1)
+        :expect t)
+      (test "f> 2"
+        (f> #'sin 1 2)
+        :expect nil)
+      (test "f> 3"
+        (f> #'sin 1 1)
+        :expect nil)
+      (test "f<"
+        (f< #'sin 1 2)
+        :expect t)
+      (test "f< 2"
+        (f< #'sin 2 1)
+        :expect nil)
+      (test "f< 3"
+        (f< #'sin 1 1)
+        :expect nil)
+      (test "f>="
+        (f>= #'sin 2 1)
+        :expect t)
+      (test "f>= 2"
+        (f>= #'sin 1 2)
+        :expect nil)
+      (test "f>= 3"
+        (f>= #'sin 1 1)
+        :expect t)
+      (test "f<="
+        (f<= #'sin 1 2)
+        :expect t)
+      (test "f<= 2"
+        (f<= #'sin 2 1)
+        :expect nil)
+      (test "f<= 3"
+        (f<= #'sin 1 1)
+        :expect t))
 
 (test-suite ("gulp / ungulp"
               :setup (rm "/tmp/clutchtest" :recursive t)
@@ -890,30 +1052,42 @@
      :expect (list "c" "d"))
    )
 
-(test-suite ("keys, mkhash")
+(test-suite ("keys, kvalues, mkhash")
     (test "mkhash"
       {(mkhash "a" 2 "b" 3) "a"}
       :expect 2)
-
-    (test "keys plist"
-      (keys (list 'a 1 'b 2))
-      :expect '(a b))
-
-    (test "keys alist"
-      (keys '((a . 1) (b . 2)))
-      :expect '(a b))
 
     (test "keys hash"
       (keys (mkhash 'a 1 'b 2))
       :expect '(a b))
 
-    (test "keys struct"
-      (keys (list 'a 1 'b 2))
-      :expect (list 'a 'b))
+    (test "kvalues hash"
+      (kvalues (mkhash 'a 1 'b 2))
+      :expect '(1 2))
 
-    (test "keys obj"
-      (keys (list 'a 1 'b 2))
-      :expect '(a b)))
+    (test "keys struct"
+      (keys (make-test-struct :a "1" :b 2))
+      :expect (list 'a 'b 'c))
+
+    (test "kvalues struct"
+      (kvalues (make-test-struct :a "1" :b 2))
+      :expect (list "1" 2 nil)))
+
+(test-suite ("getenv")
+
+    (test "getenv PATH"
+      (getenv "PATH")
+      :expect-type 'string)
+    
+    (test "setf getenv"
+      (setf (getenv "CLUTCHTEST") "ABC")
+      :expect-type 'string)
+
+    (test "getenv 2"
+      (getenv "CLUTCHTEST")
+      :expect "ABC")
+
+)
 
 (test-suite ("hashing algorithms")
     (test "md5"

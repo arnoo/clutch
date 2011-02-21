@@ -19,13 +19,13 @@
 (defpackage :clutch
     (:use     #:cl)
     (:export  #:date #:d- #:d+ #:d-delta #:ut #:miltime #:y-m-d #:date-wom #:date-week #:to-zone
-              #:date-rfc2822 #:date-gnu #:decode-duration
+              #:date-rfc-2822 #:date-gnu #:decode-duration #:encode-duration
               #:d= #:d/= #:d> #:d< #:d<= #:d>=
               #:enable-arc-lambdas #:enable-brackets #:enable-compose #:defstruct-and-export 
               #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend
               #:while #:aif #:aand #:awhen #:awhile #:awith #:acond #:rlambda
               #:if-bind #:when-bind #:while-bind
-              #:lc #:uc #:str #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:lpad #:rpad #:lines
+              #:lc #:uc #:str #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:lpad #:rpad #:strip #:lines
               #:gulp #:ungulp #:gulplines #:with-each-fline #:mapflines #:file-lines
               #:f= #:f/= #:f> #:f< #:f<= #:f>= #:f-equal #:with-temporary-file #:it
               #:sh #:ls #:argv #:mkhash #:rm #:rmdir #:mkdir #:probe-dir #:getenv #:grep
@@ -58,7 +58,7 @@
 (defmacro popend (lst)
   "Removes the last element of list <lst> and returns it"
   `(prog1
-     (last ,lst)
+     (car (last ,lst))
      (nbutlast ,lst)))
 
 (defmacro rlambda (args &rest body)
@@ -672,11 +672,16 @@
          (delete-file ,filename))))
 
 (defun rpad (string chars &key (with " "))
-  (str string (x (str with) (max 0 (- chars (length string))))))
+  (awith (str string)
+    (str it (x (str with) (max 0 (- chars (length it)))))))
 
 (defun lpad (string chars &key (with " "))
-  (str (x (str with) (max 0 (- chars (length string)))) string))
+  (awith (str string)
+    (str (x (str with) (max 0 (- chars (length it)))) it)))
     
+(defun strip (string)
+  (values (~s "/(^(\\s|\\n|\\r\\n)*|(\\s|\\n|\\r\\n)*$)//g" string)))
+
 ; sh based on run-prog-collect-output from stumpwm (GPL)
 ; note : it might be nice to return (values stdin stdout) ?
 (defun sh (command)
@@ -803,10 +808,10 @@
        hash))
 
 (defun slot-names (class)
-  #+sbcl(mapcar #'closer-mop:slot-definition-name (closer-mop:class-slots (find-class class)))
+  #+sbcl(mapcar #'closer-mop:slot-definition-name (closer-mop:class-slots class))
   #-sbcl(let ((elts (mapcar [str _]
                             (read-from-string (~s "/^.*?\\(/(/"
-                                                  (with-output-to-string (s) (prin1 (funcall (symb "NAKE-" class)) s)))))))
+                                                  (with-output-to-string (s) (prin1 (funcall (symb "MAKE-" class)) s)))))))
           (loop for i from 1 below (length elts) by 2 collect {elts i})))
 
 (defun keys (o)
@@ -816,12 +821,8 @@
           (loop for i from 0 below (length o) by 2 collect {o i}))
         ((and (listp o) (consp {o 0}))
           (mapcar #'car o))
-        ((eq (type-of o) 'standard-object)
-          #+sbcl(slot-names (class-of o))
-          #-sbcl(let ((elts (mapcar [str _]
-                                    (read-from-string (~s "/^.*?\\(/(/"
-                                                          (with-output-to-string (s) (prin1 o s)))))))
-                   (loop for i from 1 below (length elts) by 2 collect {elts i})))
+        ((subtypep (type-of o) 'structure-object)
+          (slot-names (class-of o)))
         (t nil)))
 
 (defun kvalues (o)
@@ -885,10 +886,10 @@
        (date-h date)
        (date-m date)
        (date-s date)
-       (~s "/^(-|)(\\d{3})$/\\{1}0\\2/" (str (* 100 (date-zone date))))))
+       (~s "/^(\\d)/+\\1/" (~s "/^(-|)(\\d{3})$/\\{1}0\\2/" (str (* 100 (date-zone date)))))))
 
 (defun date-gnu (date format)
-  (sh (str "date -d '" (date-rfc-2822 date) "' +'" format "'")))
+  (strip (sh (str "date -d '" (date-rfc-2822 date) "' +'" format "'"))))
 
 (defun strtout (str)
   "Converts a string to a Common Lisp universal-time"
@@ -918,12 +919,11 @@
 	  :year   uyear
 	  :dow    udow
 	  :dst    udaylight-p
-	  :zone   (or zone uzone)
+	  :zone   uzone
   )))
 
-(defun ut (&optional str-or-date)
+(defun ut (&optional str-or-date &key zone)
   "Returns the current Common Lisp universal-time, or if <str-or-date> is specified, the universal-time described by that string or date structure"
-  (declare (optimize debug))
   (if str-or-date
     (if (stringp str-or-date)
       (strtout str-or-date)
@@ -956,7 +956,7 @@
                                       ((~ "/d$/i" dur) (* 24 3600))
                                       ((~ "/w$/i" dur) (* 7 24 3600))
                                       ((~ "/M$/ " dur) (* 30 24 3600))
-                                      ((~ "/y$/i" dur) (* 12 30 24 3600))
+                                      ((~ "/y$/i" dur) (* 365 24 3600))
                                       (t (error "Can't decode duration")))
                                    (parse-integer {dur 0 -2}))))
                          (split " " duration)))))
@@ -965,7 +965,7 @@
   "Transforms a number of seconds into a duration string : '1m 1d'... into an approximated number of seconds"
   (~s "/\\s+$//"
      (let* ((du duration)
-         (y  (floor du (* 12 30 24 3600)))
+         (y  (floor du (* 365 24 3600)))
          (du (if (plusp du) (rem du (* 12 30 24 3600)) 0))
          (mo (floor du (* 30 24 3600)))
          (du (if (plusp du) (rem du (* 30 24 3600)) 0))
@@ -977,7 +977,7 @@
          (du (if (plusp du) (rem du 3600) 0))
          (m  (floor du 60))
          (s  (if (plusp du) (rem du 60) 0)))
-        (str (if (plusp y)  (str y  "Y "))
+        (str (if (plusp y)  (str y  "y "))
              (if (plusp mo) (str mo "M "))
              (if (plusp w)  (str w  "w "))
              (if (plusp d)  (str d  "d "))
@@ -1030,9 +1030,9 @@
 
 (defun miltime (&optional (d (date)))
   "Returns a 'military' time format for date : 1243,22 for 12:43:22"
-  (+ (* 100 (date-h d))
-     (date-m d)
-     (/ 100 (date-s d))))
+  (float (+ (* 100 (date-h d))
+            (date-m d)
+            (/ (date-s d) 100))))
   
 (defun to-zone (date zone)
   "Convert date to timezone zone"
@@ -1040,7 +1040,9 @@
 
 (defun y-m-d (date)
   "Date in format YYYY-MM-DD"
-  (str (date-year date) "-" (date-month date) "-" (date-day date)))
+  (str (lpad (date-year  date) 4 :with 0) "-"
+       (lpad (date-month date) 2 :with 0) "-"
+       (lpad (date-day   date) 2 :with 0)))
 
 (defmacro xor (&rest args)
   "Exclusive OR : returns nil if nothing or more than one element in args is true, returns the only true element overwise. If more than one element is found to be true, the rest is not evaluated."
