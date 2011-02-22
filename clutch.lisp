@@ -886,7 +886,10 @@
        (date-h date)
        (date-m date)
        (date-s date)
-       (~s "/^(\\d)/+\\1/" (~s "/^(-|)(\\d{3})$/\\{1}0\\2/" (str (* 100 (date-zone date)))))))
+       (~s "/^(\\d)/+\\1/"
+           (~s "/^(-|)(\\d{3})$/\\{1}0\\2/"
+               (str (* -100 (+ (if (date-dst date) -1 0)
+                               (date-zone date))))))))
 
 (defun date-gnu (date format)
   (strip (sh (str "date -d '" (date-rfc-2822 date) "' +'" format "'"))))

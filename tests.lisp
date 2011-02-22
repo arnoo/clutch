@@ -134,7 +134,7 @@
       :expect "asbd")
 
     (test "strip 2"
-      (strip "\\n asbd \\n\\r\\n ")
+      (strip (format nil "~% asbd ~% "))
       :expect "asbd")
 )
 
@@ -219,7 +219,7 @@
   )
 
 
-(test-suite ("Reader macros")
+(test-suite ("reader macros")
   (test "Square bracket reader [+ 1 _]"
     ([+ 1 _] 2)
     :expect	3)
@@ -431,7 +431,7 @@
     )
 
 
-(test-suite ("Filesystem interactions")
+(test-suite ("filesystem interactions")
 
     (test "ls non existing file"
       (ls "adfakjhoqiuyerhkljlaskdj.sssaapoiu442223")
@@ -646,6 +646,7 @@
                {it 3}))
           :expect 3)
 
+
   )
 
 
@@ -660,7 +661,7 @@
    
        (test "ut January 22 1964 23:12 +0200"
          (ut "January 22 1964 23:12 +0200")
-         :expect (encode-universal-time 0 12 23 22  1 1964 2))
+         :expect (encode-universal-time 0 12 23 22  1 1964 -2))
    
        (test "ut (date)"
          (ut (date))
@@ -742,11 +743,11 @@
          :expect "1964-03-01")
 
        (test "date-gnu"
-         (date-gnu (date :str "June 24 1999 22:12" :zone 2) "%s")
-         :expect "930265920")
+         (date-gnu (date :str "Wed, 24 Jun 1992 22:12:00 +0200" :zone -2) "%s")
+         :expect "709416720")
 
        (test "date-rfc-2822"
-         (date-rfc-2822 (date :str "June 24 1992 22:12" :zone 2))
+         (date-rfc-2822 (date :str "Wed, 24 Jun 1992 22:12:00 +0200" :zone -2))
          :expect "Wed, 24 Jun 1992 22:12:00 +0200")
 
        (test "d+"
@@ -796,9 +797,10 @@
            :expect it))
 
        (test "to-zone"
-         (let ((d (date :str "January 24 1964 23:12" :zone 2)))
-            (d- (to-zone d 3) d))
-         :expect 3600)
+         (let* ((d  (date :str "Wed, 24 Jun 1992 22:12:00 +0200"))
+                (d2 (to-zone d 3)))
+            (list (d-delta d2 d) (date-zone d2)))
+         :expect (list 0 3))
        )
 
 (test-suite ("f= f> f< ...")
@@ -1080,11 +1082,9 @@
       :expect-type 'string)
     
     (test "setf getenv"
-      (setf (getenv "CLUTCHTEST") "ABC")
-      :expect-type 'string)
-
-    (test "getenv 2"
-      (getenv "CLUTCHTEST")
+      (progn
+        (setf (getenv "CLUTCHTEST") "ABC")
+        (getenv "CLUTCHTEST"))
       :expect "ABC")
 
 )
