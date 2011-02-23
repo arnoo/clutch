@@ -646,10 +646,23 @@
                {it 3}))
           :expect 3)
 
-;  (test "memoize-to-disk hash"
-;####
-;    )
-;
+  (test "memoize-to-disk hash 2 args"
+    (let ((h (mkhash 'a 1))
+          (b 1))
+       (awith (memoize-to-disk [+ {_ 'a} b __])
+           {it h 0}
+           (setf b 2)
+           {it h 0}))
+    :expect 2)
+
+    (test "memoize-to-disk changing hash" ; Fails on ABCL (No CL-STORE)
+      (let ((h (mkhash 'a 1)))
+           (awith (memoize-to-disk [_ 'a])
+                  {it h}
+                  (setf {h 'a} 2)
+                  {it h}))
+      :expect 2)
+
   )
 
 
