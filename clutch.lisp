@@ -1082,7 +1082,7 @@
     Arguments and results are limited to what can be serialized using cl-store. Function arguments or return values are out. cl-store does not work on ABCL yet, so use on abcl is limited.
   "
   (unless prefix
-    (setf prefix (str "clutch-mem-" (~ "/\{([A-E0-9]+)\}/" (str fn) 1))) ; TODO: no good (find a persistent name)
+    (setf prefix (str "clutch-mem-" (uuid)))
     (setf force-reset t))
   (let ((fre (str "/\\/" prefix "#[^\\/]+$/")))
     (when force-reset (mapcar #'rm (~ fre (ls dir))))
