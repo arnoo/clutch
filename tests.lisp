@@ -646,7 +646,10 @@
                {it 3}))
           :expect 3)
 
-
+;  (test "memoize-to-disk hash"
+;####
+;    )
+;
   )
 
 
@@ -676,8 +679,8 @@
          :expect (ut (date :str "12:45")))
 
        (test "miltime"
-         (miltime (date :ut 3506915075))
-         :expect 804.35)
+         (miltime (date :str "12:45"))
+         :expect 1245.0)
    
        (test "date-week (date January 22 1964 23:12)"
          (date-week (date :str "January 22 1964 23:12"))
@@ -687,9 +690,9 @@
          (date-wom (date :str "January 22 1964 23:12"))
          :expect 4)
    
-       (test "ut (date January 22 1964 23:12)"
-         (ut (date :str "January 22 1964 23:12" :zone 2))
-         :expect (encode-universal-time 0 12 23 22  1 1964 -1))
+       (test "ut (date January 22 1964 23:12 +0200)"
+         (ut (date :str "January 22 1964 23:12 +0200"))
+         :expect (encode-universal-time 0 12 23 22  1 1964 -2))
    
        (test "d<"
          (d< (date :str "January 22 1964 23:12")
