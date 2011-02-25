@@ -806,10 +806,10 @@
          (encode-duration 22)
          :expect "22s")
 
-       (test "encode-duration 2"
-         (awith (+ 22 (* 5 60) (* 4 3600) (* 5 3600 24) (* 3 3600 24 7) (* 3600 24 365) (* 2 3600 24 30))
-           (decode-duration (encode-duration it))
-           :expect it))
+       (awith (+ 22 (* 5 60) (* 4 3600) (* 5 3600 24) (* 3 3600 24 7) (* 3600 24 365) (* 2 3600 24 30))
+         (test "encode-duration 2"
+             (decode-duration (encode-duration it))
+             :expect it))
 
        (test "to-zone"
          (let* ((d  (date :str "Wed, 24 Jun 1992 22:12:00 +0200"))

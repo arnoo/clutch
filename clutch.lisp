@@ -328,6 +328,7 @@
   (if test t nil))
 
 (defun vector-to-list* (object)
+  (declare (optimize speed))
   (let ((result (list nil))
         (length (length object)))
     (declare (fixnum length))
@@ -338,6 +339,7 @@
       (rplacd splice (list (aref object index))))))
 
 (defun parse-re (re)
+  (declare (optimize speed))
   (let ((result (list "")))
      (loop for i from 1 below (length re)
            do (if (and (char= {re i} #\/) (char/= {re (- i 1)} {"\\" 0})) 
@@ -362,6 +364,7 @@
     for each match.
     
     example : (re \"\w+(\d)\" \"ab2cc\")"
+  (declare (optimize speed))
   (multiple-value-bind (regexp subre flags) (parse-re re)
     (declare (ignorable subre))
     (let ((result nil))
@@ -374,6 +377,7 @@
           (return (car result)))))))
 
 (defmethod ~ ((re string) (string-or-list pathname) &optional capture-nb)
+  (declare (optimize speed))
   (~ re (str string-or-list) capture-nb))
 
 (defmethod ~ ((re string) (string-or-list list) &optional capture-nb)
@@ -382,6 +386,7 @@
    Specify a <capture-nb> value to return capture number <capture-nb> instead of the string that matches.
 
    example : (re \"\w+(\d)\" \"ab2cc\")"
+  (declare (optimize speed))
   (let ((matching (remove-if-not [progn (unless (or (stringp _) (pathnamep _))
                                            (error "Element of list for ~~ cannot be assimilated to a string : ~A" _))
                                         (cl-ppcre:do-matches (a b (parse-re re) (str _)) (return t))]
@@ -395,15 +400,18 @@
 (defmethod /~ ((re string) (obj string))
   "Returns nil if <re> matches string obj
    returns the string if <re> does not match"
+  (declare (optimize speed))
   (cl-ppcre:do-matches (a b (parse-re re) obj t) (return nil)))
 
 (defmethod /~ ((re string) (obj list))
   "Returns the elements of list <obj> that do not match <re>
     example: (/~ \"\w{3}\" (list \"aaa\" \"bb\" \"ccc\"))"
+  (declare (optimize speed))
   (remove-if-not [/~ re _]
              obj))
 
 (defmethod /~ ((re string) (obj pathname))
+  (declare (optimize speed))
   (/~ re (str obj)))
 
 (defgeneric ~s (re obj &optional capture-nb))
@@ -412,6 +420,7 @@
   "Replaces all substrings that match <re> in <string> by <replacement>.
   <flags> can contain Perl regexp flags like g
   replacement can be a string which may contain the special substrings \\& for the whole match, \\` for the part of target-string before the match, \\' for the part of target-string after the match, \\N or \\{N} for the Nth register where N is a positive integer."
+  (declare (optimize speed))
   (multiple-value-bind (regexp subre flags) (parse-re re)
     (let ((matches (~ re obj capture-nb)))
       (values
@@ -421,9 +430,11 @@
         matches))))
 
 (defmethod ~s ((re string) (obj pathname) &optional capture-nb)
+  (declare (optimize speed))
   (~s re (str obj) capture-nb))
 
 (defmethod ~s ((re string) (obj list) &optional capture-nb)
+  (declare (optimize speed))
   (mapcar [~s re _ capture-nb] obj))
 
 (defun resplit (re str)
@@ -969,7 +980,7 @@
   (~s "/\\s+$//"
      (let* ((du duration)
          (y  (floor du (* 365 24 3600)))
-         (du (if (plusp du) (rem du (* 12 30 24 3600)) 0))
+         (du (if (plusp du) (rem du (* 365 24 3600)) 0))
          (mo (floor du (* 30 24 3600)))
          (du (if (plusp du) (rem du (* 30 24 3600)) 0))
          (w  (floor du (* 7 24 3600)))
