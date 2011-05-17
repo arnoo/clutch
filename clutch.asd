@@ -32,6 +32,7 @@
   :depends-on (:cl-ppcre
                :ironclad
                :uuid
+               :anaphora
                #-abcl :flexi-streams
                #-abcl :cl-store
                #-abcl :drakma

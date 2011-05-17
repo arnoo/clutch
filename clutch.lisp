@@ -17,13 +17,13 @@
 ;
 
 (defpackage :clutch
-    (:use     #:cl)
+    (:use     #:cl #:anaphora)
     (:export  #:date #:d- #:d+ #:d-delta #:ut #:miltime #:y-m-d #:date-wom #:date-week #:to-zone
               #:date-rfc-2822 #:date-gnu #:decode-duration #:encode-duration
               #:d= #:d/= #:d> #:d< #:d<= #:d>=
               #:enable-arc-lambdas #:enable-brackets #:enable-compose #:defstruct-and-export 
               #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend
-              #:while #:aif #:aand #:awhen #:awhile #:awith #:acond #:rlambda
+              #:while #:awhile #:awith #:rlambda #:acond
               #:if-bind #:when-bind #:while-bind
               #:lc #:uc #:str #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:lpad #:rpad #:strip #:lines
               #:gulp #:ungulp #:gulplines #:with-each-fline #:mapflines #:file-lines
@@ -268,12 +268,13 @@
   "Evaluates <body> with <it> bound to <form>"
 	`(let ((it ,form)) ,@body))
 
-(defmacro aif (test then &optional else)
-  "Evaluates <then with <it> bound to result of evaluating <test> if this result is not nil, <else> otherwise"
-  `(awith ,test
-     (if it
-         ,then
-         ,else)))
+(defmacro acond (&rest forms)
+  "Anaphoric cond : like a regular cond, except the result of evaluating the condition form can be accessed as <it>"
+    (let ((blockname (gensym)))
+        `(block ,blockname
+              ,@(loop for form in forms
+                        collect `(awhen ,(car form) (return-from ,blockname ,(cadr form))))
+                    nil)))
 
 (defmacro if-bind ((var test) then &optional else)
   "Evaluates <then with <var> bound to result of evaluating <test> if this result is not nil, <else> otherwise"
@@ -281,12 +282,6 @@
      (if ,var
          ,then
          ,else)))
-
-(defmacro awhen (test &body body)
-  "Evaluates <body> with <it> bound to result of evaluating <test> if this result is not nil"
-  `(awith ,test
-     (when it
-           ,@body)))
 
 (defmacro when-bind ((var test) &body body)
   "Evaluates <body> with <var> bound to result of evaluating <test> if this result is not nil"
@@ -310,18 +305,6 @@
   "Loops on <body> as long as <test> does not evaluates to nil"
   `(loop while ,test
          do (progn ,@body)))
-
-(defmacro aand (test &rest tests)
-  `(awith ,test
-      (and it ,@tests)))
-
-(defmacro acond (&rest forms)
-  "Anaphoric cond : like a regular cond, except the result of evaluating the condition form can be accessed as <it>"
-  (let ((blockname (gensym)))
-    `(block ,blockname
-      ,@(loop for form in forms
-          collect `(awhen ,(car form) (return-from ,blockname ,(cadr form))))
-      nil)))
 
 (defun ? (test)
   "Returns nil if <test> evaluates to nil, t otherwise"

@@ -144,14 +144,6 @@
     (awith 22 (+ 1 it))
     :expect	23)
 
-  (test "Aif"
-    (aif t it)
-    :expect	t)
-
-  (test "Aif 2"
-    (aif nil 2 it)
-    :expect	nil)
-
   (test "if-bind"
     (if-bind (b nil) b 2)
     :expect	2)
@@ -159,18 +151,6 @@
   (test "if-bind 2"
     (if-bind (b 2) b 4)
     :expect	2)
-
-  (test "awhen"
-    (let ((a 1))
-      (awhen nil (incf a) (incf a))
-      a)
-    :expect	1)
-
-  (test "awhen 2"
-    (let ((a 1))
-      (awhen 2 (incf a it) (incf a it))
-      a)
-    :expect	5)
 
   (test "when-bind"
     (let ((a 1))
@@ -202,20 +182,6 @@
       a)
     :expect	4)
 
-  (test "aand"
-    (aand 2 (+ it 3))
-    :expect	5)
-
-  (test "aand 2"
-    (aand nil 2)
-    :expect	nil)
-
-  (test "acond"
-    (acond 
-      (nil 22)
-      (23 it)
-      (t 24))
-    :expect	23)
   )
 
 
