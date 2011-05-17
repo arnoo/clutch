@@ -25,7 +25,7 @@
               #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend
               #:while #:awhile #:awith #:rlambda #:acond
               #:if-bind #:when-bind #:while-bind
-              #:lc #:uc #:str #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:lpad #:rpad #:strip #:lines
+              #:lc #:uc #:str #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:trim #:lpad #:rpad #:strip #:lines
               #:gulp #:ungulp #:gulplines #:with-each-fline #:mapflines #:file-lines
               #:f= #:f/= #:f> #:f< #:f<= #:f>= #:f-equal #:with-temporary-file #:it
               #:sh #:ls #:argv #:mkhash #:rm #:rmdir #:mkdir #:probe-dir #:getenv #:grep
@@ -664,6 +664,9 @@
          (progn
             ,@body)
          (delete-file ,filename))))
+
+(defun trim (string length)
+  {string 0 (min (length string) length)})
 
 (defun rpad (string chars &key (with " "))
   (awith (str string)
