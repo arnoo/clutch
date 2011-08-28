@@ -29,7 +29,7 @@
   :serial t
   :version 0.1
   :components ((:file "clutch"))
-  :depends-on (:cl-ppcre
+  :depends-on (:cl-ppcre-unicode
                :ironclad
                :uuid
                :anaphora

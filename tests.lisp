@@ -39,6 +39,14 @@
     (split " " "1 2 3")
     :expect (list "1" "2" "3"))
 
+  (test "split 2"
+    (split "" "123")
+    :expect (list "1" "2" "3"))
+
+  (test "split 3"
+    (split " ; " " ; 1 ; 2 ; 3 ; ")
+    :expect (list "" "1" "2" "3" ""))
+
   (test "join"
     (join " " (list "1" "2" (list "3" "4")))
     :expect "1 2 3 4"))
@@ -209,6 +217,38 @@
   (test "Curly brackets reader string"
     {"abc" 1}
     :expect	#\b)
+
+  (test "Curly brackets reader string 2"
+    {"ab" -2 -1}
+    :expect	"b")
+
+  (test "Curly brackets reader string 3"
+    {"ab" -3 -1}
+    :expect	"ab")
+
+  (test "Curly brackets reader string 4"
+    {"ab" -4 -1}
+    :expect-error	t)
+
+  (test "Curly brackets reader string 5"
+    {"ab" 0 -1}
+    :expect	"ab")
+
+  (test "Curly brackets reader string 6"
+    {"ab" 0 2}
+    :expect	"ab")
+
+  (test "Curly brackets reader string 7"
+    {"ab" 0 3}
+    :expect-error)
+
+  (test "Curly brackets reader string 8"
+    {"ab" 3}
+    :expect-error)
+
+  (test "Curly brackets reader string 9"
+    {"ab" -3}
+    :expect-error)
 
   (test "Curly brackets reader subseq"
     {"abc" 1 2}

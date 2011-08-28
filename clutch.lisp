@@ -25,7 +25,7 @@
               #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend
               #:while #:awhile #:awith #:rlambda #:acond
               #:if-bind #:when-bind #:while-bind
-              #:lc #:uc #:str #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:trim #:lpad #:rpad #:strip #:lines
+              #:str #:lc #:uc #:ucfirst #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:trim #:lpad #:rpad #:strip #:lines
               #:gulp #:ungulp #:gulplines #:with-each-fline #:mapflines #:file-lines
               #:f= #:f/= #:f> #:f< #:f<= #:f>= #:f-equal #:with-temporary-file #:it
               #:sh #:ls #:argv #:mkhash #:rm #:rmdir #:mkdir #:probe-dir #:getenv #:grep
@@ -71,9 +71,10 @@
   "Recursively flatten a list of lists"
   (let ((result nil))
     (funcall (rlambda (l)
-                (if (atom l)
-                    (pushend l result)
-                    (mapcar #'recurse l)))
+                (when l
+                  (if (atom l)
+                      (pushend l result)
+                      (mapcar #'recurse l))))
              lst)
     result))
 
@@ -82,14 +83,6 @@
   (with-output-to-string (s)
     (mapcar (lambda (o) (princ o s))
             (remove nil (flatten args)))))
-
-(defun lc (object)
-  "Converts an object to a lowercase string"
-  (string-downcase (str object)))
-
-(defun uc (object)
-  "Converts an object to an uppercase string"
-  (string-upcase (str object)))
 
 (defun keyw (&rest args)
   "Converts <args> to a keyword"
@@ -123,15 +116,18 @@
    (defmethod access ((object sequence) (start number) &rest args)
       (let ((end (if args (car args) nil))
             (len (length object)))
-        (when (or (> start len)
-                  (<= start (- len)))
-          (error "Index out of bounds"))
+        (when (or (if end (> start len)
+                          (>= start len))
+                  (and (minusp start)
+                       (or (if end (< start (- (- len) 1)) (< start (- len))))))
+          (error (str (when end "First ") "Index out of bounds")))
         (if end
             (if (or (> end len)
                     (and (minusp end)
                          (< end (- -1 len))))
               (error "Second index out of bounds")
-              (subseq object (mod start len)
+              (subseq object (if (minusp start) (+ len 1 start)
+                                 start)
                              (if (minusp end) (+ len 1 end)
                                  end)))
             (elt object (mod start len)))))
@@ -141,6 +137,9 @@
 
    (defmethod access ((object hash-table) start &rest args)
       (gethash start object))
+
+   (defmethod access ((object standard-object) start &rest args)
+      (slot-value object (symb start)))
 
    (defmethod access ((object structure-object) start &rest args)
       (slot-value object (symb start)))
@@ -165,7 +164,7 @@
                       (setf (elt ,object (mod ,start len)) ,(car args)))))
             ((hash-table-p ,object)
                (setf (gethash ,start ,object) ,(car args)))
-            ((typep ,object 'structure-object)
+            ((or (typep ,object 'structure-object) (typep ,object 'standard-object))
                (setf (slot-value ,object (symb ,start)) ,(car args)))))
 
    (defsetf access setaccess)
@@ -208,12 +207,24 @@
 
    (enable-arc-lambdas))
 
+(defun lc (&rest object)
+  "Converts an object to a lowercase string"
+  (string-downcase (str object)))
+
+(defun uc (&rest object)
+  "Converts an object to an uppercase string"
+  (string-upcase (str object)))
+
+(defun ucfirst (&rest object)
+  (let ((strd (str object)))
+    (str (uc {strd 0}) {strd 1 -1})))
+
 (defun split (sep seq)
   (if (= (length sep) 0)
-      (coerce seq 'list)
+      (mapcar #'str (coerce seq 'list))
       (loop for start = 0 then (+ end (length sep))
             for end = (search sep seq :start2 start)
-            collecting {seq start (or end (length seq))}
+            collecting (subseq seq start (or end (length seq)))
             while end)))
 
 (defun o (&rest fns)
@@ -429,7 +440,11 @@
 (defun join (join-seq &rest seq-lists)
   (awith (flatten seq-lists)
     (if (cdr it)
-        (concatenate (class-of join-seq) (car it) join-seq (join join-seq (cdr it)))
+        (concatenate (class-of (car it)) (car it) 
+                     (if (subtypep (type-of join-seq) 'sequence)
+                         join-seq
+                         (make-sequence (class-of (car it)) 1 :initial-element join-seq))
+                     (join join-seq (cdr it)))
         (car it))))
 
 (defun x (seq nb)
@@ -581,49 +596,51 @@
                                         (length (~ (str "/^" (x "[^\\n]*\\n" (- lines n)) "/")
                                                    buf 0)))))))
 
-(defmacro with-each-fline ((path-or-stream &key (offset 0) limit) &rest body)
+(defmacro with-each-fline ((path-or-stream &key (offset 0) limit as) &rest body)
   "<args> should look like (path-or-stream &key (offset 0) limit)
    Evaluates <body> for each line in <path-or-stream>, with the line
    available as <it>, and the line number as <@it>."
-    `(block read-loop
-        (let ((offset ,offset)
-              (limit ,limit))
-          (when (and limit (< limit 0))
-            (error "Limit must be a positive integer (number of lines)"))
-          (when (and (not (looks-like-file ,path-or-stream))
-                     (< offset 0))
-            ; we have to read the whole thing
-            (let ((done-lines 0)
-                  (@it offset))
-              (loop for it in {(lines (gulp ,path-or-stream)) offset (+ offset limit -1)}
-                    do ,@body
-                       (incf @it)
-                       (incf done-lines))
-              (return-from read-loop done-lines)))
-          (with-stream (s ,path-or-stream)
-              (when (and (looks-like-file ,path-or-stream)
-                         (= (file-length s) 0))
-                (return-from read-loop 0))
-              (when (and (looks-like-file ,path-or-stream)
+    (let ((linesymb (if as as 'it))
+          (nbsymb (if as (symb '@ as) '@it)))
+      `(block read-loop
+          (let ((offset ,offset)
+                (limit ,limit))
+            (when (and limit (< limit 0))
+              (error "Limit must be a positive integer (number of lines)"))
+            (when (and (not (looks-like-file ,path-or-stream))
                        (< offset 0))
-                ; we can read it backwards to set the file-position then set offset to 0
-                (file-position s (file-length s))
-                (back-n-lines s (- offset))
-                (setf offset 0))
-              (let ((skipped-lines 0)
-                    (done-lines 0)
-                    (@it offset))
-                (do ((it (read-line s) (read-line s nil 'eof)))
-                    ((eq it 'eof) (values))
-                    (if (>= skipped-lines offset)
-                      (progn
-                        (when (and limit (>= done-lines limit))
-                          (return-from read-loop done-lines))
-                        (incf done-lines)
-                        (incf @it)
-                        ,@body)
-                      (incf skipped-lines)))
-                done-lines)))))
+              ; we have to read the whole thing
+              (let ((done-lines 0)
+                    (,nbsymb offset))
+                (loop for ,linesymb in {(lines (gulp ,path-or-stream)) offset (+ offset limit -1)}
+                      do ,@body
+                         (incf ,nbsymb)
+                         (incf done-lines))
+                (return-from read-loop done-lines)))
+            (with-stream (s ,path-or-stream)
+                (when (and (looks-like-file ,path-or-stream)
+                           (= (file-length s) 0))
+                  (return-from read-loop 0))
+                (when (and (looks-like-file ,path-or-stream)
+                         (< offset 0))
+                  ; we can read it backwards to set the file-position then set offset to 0
+                  (file-position s (file-length s))
+                  (back-n-lines s (- offset))
+                  (setf offset 0))
+                (let ((skipped-lines 0)
+                      (done-lines 0)
+                      (,nbsymb offset))
+                  (do ((,linesymb (read-line s) (read-line s nil 'eof)))
+                      ((eq ,linesymb 'eof) (values))
+                      (if (>= skipped-lines offset)
+                        (progn
+                          (when (and limit (>= done-lines limit))
+                            (return-from read-loop done-lines))
+                          (incf done-lines)
+                          (incf ,nbsymb)
+                          ,@body)
+                        (incf skipped-lines)))
+                  done-lines))))))
 
 (defun gulplines (path-or-stream &key (offset 0) limit)
   "Gulps the whole provided file, URL or stream into an array of its lines, optionally starting at line <offset> and limiting output to <limit> lines. <offset> can be negative, in which case reading will start -<offset> lines from the end."
