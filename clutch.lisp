@@ -19,7 +19,7 @@
 (defpackage :clutch
     (:use     #:cl #:anaphora)
     (:export  #:date #:d- #:d+ #:d-delta #:ut #:miltime #:y-m-d #:date-wom #:date-week #:to-zone
-              #:date-rfc-2822 #:date-gnu #:decode-duration #:encode-duration
+              #:date-rfc-2822 #:date-rfc-3339 #:date-gnu #:decode-duration #:encode-duration
               #:d= #:d/= #:d> #:d< #:d<= #:d>=
               #:enable-arc-lambdas #:enable-brackets #:enable-compose #:defstruct-and-export 
               #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend
@@ -335,17 +335,17 @@
 (defun parse-re (re)
   (declare (optimize speed))
   (let ((result (list "")))
-     (loop for i from 1 below (length re)
-           do (if (and (char= {re i} #\/) (char/= {re (- i 1)} {"\\" 0})) 
-                  (push "" result)
-                  (setf (car result) (str (car result) {re i}))))
+    (loop for i from 1 below (length re)
+          do (if (and (char= {re i} #\/) (char/= {re (- i 1)} {"\\" 0})) 
+                 (push "" result)
+                 (setf (car result) (str (car result) {re i}))))
+     (when (in (car result) #\i)
+        (setf (caddr result) (str "(?i)" (caddr result))))
      (when (< (length result) 3)
         (push (car result) result)
         (setf (cadr result) ""))
-     (when (char/= {re 0} #\/)
-        (setf (car result) (str {re 0} (car result))))
-     (when (in (car result) #\i)
-        (setf (caddr result) (str "(?i)" (caddr result))))
+     (when (in (car result) #\x)
+        (setf (caddr result) (cl-ppcre::regex-replace-all "\\s" (caddr result) "")))
      (setf (cadr result) (cl-ppcre::regex-replace-all "\\\\/" (cadr result) "/"))
      (apply #'values (reverse result))))
 
@@ -357,7 +357,7 @@
     if <capture-nb> is not nil, only capture number <capture-nb> will be returned
     for each match.
     
-    example : (re \"\w+(\d)\" \"ab2cc\")"
+    example : (~ \"/\w+(\d)/\" \"ab2cc\")"
   (declare (optimize speed))
   (multiple-value-bind (regexp subre flags) (parse-re re)
     (declare (ignorable subre))
@@ -417,10 +417,18 @@
   (declare (optimize speed))
   (multiple-value-bind (regexp subre flags) (parse-re re)
     (let ((matches (~ re obj capture-nb)))
+      (when (in flags #\e)
+        (let ((repl subre))
+          (setf subre (lambda (&rest matches)
+                        (let ($0 $1 $2 $3 $4 $5 $6 $7 $8 $9)
+                          (loop for m in matches
+                                for i from 0
+                                do (setf (symbol-value (symb "$" i)) m))
+                          (str (eval (read-from-string repl))))))))
       (values
         (if (in flags #\g)
-          (cl-ppcre::regex-replace-all regexp obj subre)
-          (cl-ppcre::regex-replace     regexp obj subre))
+          (cl-ppcre::regex-replace-all regexp obj subre :simple-calls t)
+          (cl-ppcre::regex-replace     regexp obj subre :simple-calls t))
         matches))))
 
 (defmethod ~s ((re string) (obj pathname) &optional capture-nb)
@@ -685,6 +693,7 @@
 (defun trim (string length)
   {string 0 (min (length string) length)})
 
+;TODO: what if with is more than one char ??
 (defun rpad (string chars &key (with " "))
   (awith (str string)
     (str it (x (str with) (max 0 (- chars (length it)))))))
@@ -803,7 +812,7 @@
 
 (defun mkdir (dir)
   "Creates directory <dir>"
-  (awith (make-pathname :directory dir)
+  (awith (make-pathname :directory `(,(if (char= {dir 0} #\/) :absolute :relative) ,dir))
     (ensure-directories-exist it)
     it))
 
@@ -890,8 +899,29 @@
   dow day month year
   dst zone)
 
-(defun date-rfc-2822 (date)
+(defun date-formatzone (date)
+  "Returns a 4 figure zone string starting with + or -"
+  (~s "/^(\\d)/+\\1/"
+      (~s "/^(-|)(\\d{3})$/\\{1}0\\2/"
+          (str (* -100 (+ (if (date-dst date) -1 0)
+                              (date-zone date)))))))
+
+(defun date-rfc-3339 (&optional date)
+  "Returns a date in the RFC-2822 format : 1937-01-01T12:00:27.87+00:20"
+  (unless date (setf date (date)))
+  (format nil "~4,'0D-~2,'0D-~2,'0DT~2,'0D:~2,'0D:~2,'0D~A"
+         (date-year date)
+         (date-month date)
+         (date-day date)
+         (date-h date)
+         (date-m date)
+         (date-s date)
+         (if (zerop (date-zone date)) "Z" (date-formatzone date))))
+
+
+(defun date-rfc-2822 (&optional date)
   "Returns a date in the RFC-2822 format : Mon, 07 Aug 2006 12:34:56 -0600"
+  (unless date (setf date (date)))
   (format nil "~A, ~2,'0D ~A ~4,'0D ~2,'0D:~2,'0D:~2,'0D ~A"
        {+days-abbr+ (date-dow date)}
        (date-day date)
@@ -900,10 +930,7 @@
        (date-h date)
        (date-m date)
        (date-s date)
-       (~s "/^(\\d)/+\\1/"
-           (~s "/^(-|)(\\d{3})$/\\{1}0\\2/"
-               (str (* -100 (+ (if (date-dst date) -1 0)
-                               (date-zone date))))))))
+       (date-formatzone date)))
 
 (defun date-gnu (date format)
   (strip (sh (str "date -d '" (date-rfc-2822 date) "' +'" format "'"))))
@@ -1132,25 +1159,27 @@
   (let ((cache (mkhash))
         (cycle 0))
      #'(lambda (&rest args)
-          (let ((utc (ut)))
-            (when expire
-               (rm-entries-older-than cache (- utc expire)))
-            (when remember-last
-               (rm-oldest-entries cache remember-last)
-               (incf cycle)
-               (when (= cycle most-positive-fixnum) (setf cycle 0)))
-            (multiple-value-bind (val hit) (gethash args cache)
-              (if hit
-                  (progn
-                    (when (or remember-last expire)
-                       (setf {cache args} (list (car val) utc cycle)))
-                    (caddr val))
-                  (progn
-                    (when remember-last
-                         (rm-oldest-entries cache (- remember-last 1)))
-                    (apply #'values 
-                      (setf {cache args}
-                            (list (apply fn args) utc cycle))))))))))
+          (if (getf args :_expire_entry)
+            (remhash args cache)
+            (let ((utc (ut)))
+              (when expire
+                 (rm-entries-older-than cache (- utc expire)))
+              (when remember-last
+                 (rm-oldest-entries cache remember-last)
+                 (incf cycle)
+                 (when (= cycle most-positive-fixnum) (setf cycle 0)))
+              (multiple-value-bind (val hit) (gethash args cache)
+                (if hit
+                    (progn
+                      (when (or remember-last expire)
+                         (setf {cache args} (list (car val) utc cycle)))
+                      (caddr val))
+                    (progn
+                      (when remember-last
+                           (rm-oldest-entries cache (- remember-last 1)))
+                      (apply #'values 
+                        (setf {cache args}
+                              (list (apply fn args) utc cycle)))))))))))
 
 (defmacro before (fn &rest body)
   "Redefines <fn> so that <body> gets executed first each time <fn> is called. <body> can access the arguments passed to fn through variable <args>. Will not work with inlined functions.
