@@ -46,9 +46,9 @@
 
 (defmacro pushend (object lst)
   "Appends <object> to list <lst>"
-  `(if ,lst
-       (nconc ,lst (list ,object))
-       (setf ,lst (list ,object))))
+  ` (setq ,lst (if ,lst
+                   (nconc ,lst (list ,object))
+                   (list ,object))))
 
 (defmacro pushendnew (object lst &key test)
   "Appends <object> to list <lst> if <object> is not already in <lst> (using equality test <test>)"
