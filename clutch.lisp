@@ -46,7 +46,7 @@
 
 (defmacro pushend (object lst)
   "Appends <object> to list <lst>"
-  ` (setq ,lst (if ,lst
+  ` (setf ,lst (if ,lst
                    (nconc ,lst (list ,object))
                    (list ,object))))
 
