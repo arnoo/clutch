@@ -690,8 +690,8 @@
             ,@body)
          (delete-file ,filename))))
 
-(defun trim (string length)
-  {string 0 (min (length string) length)})
+(defun trim (seq length)
+  {seq 0 (min (length seq) length)})
 
 ;TODO: what if with is more than one char ??
 (defun rpad (string chars &key (with " "))
@@ -702,8 +702,11 @@
   (awith (str string)
     (str (x (str with) (max 0 (- chars (length it)))) it)))
     
-(defun strip (string)
-  (values (~s "/(^(\\s|\\n|\\r\\n)*|(\\s|\\n|\\r\\n)*$)//g" string)))
+(defun strip (string &rest chars)
+      (values (~s (if chars
+                      (str "/(^[" (str chars) "]*|[" (str chars) "]*$)//g")
+                      "/(^(\\s|\\n|\\r\\n)*|(\\s|\\n|\\r\\n)*$)//g")
+                  string)))
 
 ; sh based on run-prog-collect-output from stumpwm (GPL)
 ; note : it might be nice to return (values stdin stdout) ?
