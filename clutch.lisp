@@ -25,7 +25,7 @@
               #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend
               #:while #:awhile #:awith #:rlambda #:acond
               #:if-bind #:when-bind #:while-bind
-              #:str #:lc #:uc #:ucfirst #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:trim #:lpad #:rpad #:strip #:lines
+              #:str #:lc #:uc #:ucfirst #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:trim #:lpad #:rpad #:strip #:lines #:str-replace
               #:gulp #:ungulp #:gulplines #:with-each-fline #:mapflines #:file-lines
               #:f= #:f/= #:f> #:f< #:f<= #:f>= #:f-equal #:with-temporary-file #:it
               #:sh #:ls #:argv #:mkhash #:rm #:rmdir #:mkdir #:probe-dir #:getenv #:grep
@@ -407,6 +407,16 @@
 (defmethod /~ ((re string) (obj pathname))
   (declare (optimize speed))
   (/~ re (str obj)))
+
+(defun str-replace (what with-what in &key count)
+  (loop for pos = (search what (or result in)
+                          :start2 (if pos (+ pos 1) 0))
+        while (and pos (or (null count) (> count 0)))
+        for result = (str {(or result in) 0 pos}
+                          with-what
+                          {(or result in) (+ pos (length what)) -1})
+        do (when count (decf count))
+        finally (return-from str-replace (or result in))))
 
 (defgeneric ~s (re obj &optional capture-nb))
 
