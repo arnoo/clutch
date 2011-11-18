@@ -161,7 +161,12 @@
                                         (if (minusp end) (+ len 1 end)
                                             end))
                                 ,(cadr args)))
-                      (setf (elt ,object (mod ,start len)) ,(car args)))))
+                      (if (vectorp ,object)
+                          (setf ,object (concatenate (type-of ,object)
+                                                     (access ,object 0 ,start)
+                                                     (make-sequence (append (butlast (type-of ,object)) (list 1)) 1 :initial-element ,(car args))
+                                                     (access ,object (+ ,start 1) -1)))
+                          (setf (elt ,object (mod ,start len)) ,(car args))))))
             ((hash-table-p ,object)
                (setf (gethash ,start ,object) ,(car args)))
             ((or (typep ,object 'structure-object) (typep ,object 'standard-object))
@@ -339,11 +344,10 @@
           do (if (and (char= {re i} #\/) (char/= {re (- i 1)} {"\\" 0})) 
                  (push "" result)
                  (setf (car result) (str (car result) {re i}))))
+     (when (= (length result) 2)
+       (push "" (cdr result)))
      (when (in (car result) #\i)
         (setf (caddr result) (str "(?i)" (caddr result))))
-     (when (< (length result) 3)
-        (push (car result) result)
-        (setf (cadr result) ""))
      (when (in (car result) #\x)
         (setf (caddr result) (cl-ppcre::regex-replace-all "\\s" (caddr result) "")))
      (setf (cadr result) (cl-ppcre::regex-replace-all "\\\\/" (cadr result) "/"))
@@ -505,7 +509,7 @@
           #-abcl
           ((and (stringp ,path-or-stream) 
                 (> (length ,path-or-stream) 5)
-                (string-equal {,path-or-stream 0 6} "http://"))
+                (string-equal {,path-or-stream 0 7} "http://"))
              (multiple-value-bind (response status-code headers real-url stream must-close reason-phrase)
                                   (drakma:http-request ,path-or-stream :want-stream t :force-binary ,binary)
                   (declare (ignorable headers real-url stream must-close reason-phrase))
@@ -525,7 +529,7 @@
   (not (or (streamp path-or-stream)
            (and (stringp path-or-stream) 
                (> (length path-or-stream) 5)
-               (string-equal {path-or-stream 0 6} "http://")))))
+               (string-equal {path-or-stream 0 7} "http://")))))
   
 
 (defun gulp (path-or-stream &key binary (offset 0) limit)
@@ -570,7 +574,7 @@
                                   :start1 index
                                   :start2 remoffset))
                           (setf seq (concatenate 'string seq {{buf 0 pos} remoffset -1})))))
-             (when (and binary (equal seq "")) (setf seq #()))
+             (when (and binary (string= seq "")) (setf seq #()))
              (when (< offset 0)
                (setf seq (if (> (- offset) (length seq))
                              ""
@@ -920,7 +924,7 @@
                               (date-zone date)))))))
 
 (defun date-rfc-3339 (&optional date)
-  "Returns a date in the RFC-2822 format : 1937-01-01T12:00:27.87+00:20"
+  "Returns a date in the RFC-3339 format : 1937-01-01T12:00:27.87+00:20"
   (unless date (setf date (date)))
   (format nil "~4,'0D-~2,'0D-~2,'0DT~2,'0D:~2,'0D:~2,'0D~A"
          (date-year date)
@@ -1172,7 +1176,7 @@
   (let ((cache (mkhash))
         (cycle 0))
      #'(lambda (&rest args)
-          (if (getf args :_expire_entry)
+          (if (eq (first (last args 2)) :_expire_entry)
             (remhash args cache)
             (let ((utc (ut)))
               (when expire

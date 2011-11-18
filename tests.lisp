@@ -240,15 +240,15 @@
 
   (test "Curly brackets reader string 7"
     {"ab" 0 3}
-    :expect-error)
+    :expect-error t)
 
   (test "Curly brackets reader string 8"
     {"ab" 3}
-    :expect-error)
+    :expect-error t)
 
   (test "Curly brackets reader string 9"
     {"ab" -3}
-    :expect-error)
+    :expect-error t)
 
   (test "Curly brackets reader subseq"
     {"abc" 1 2}
@@ -260,7 +260,7 @@
 
   (test "Curly brackets reader modulo 2"
     {"abc" -2 -1}
-    :expect "bc")
+    :expect "c")
 
   (test "Curly brackets reader modulo 3"
     {"abc" 0 -4}
