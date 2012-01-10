@@ -563,6 +563,15 @@
                  {it 0}))
             :expect 1)
 
+    (test "memoize 2b"
+            (let ((a 0))
+               (awith (memoize [+ _ a] :remember-last 1)
+                 {it 0}
+                 {it 1}
+                 (setf a 1)
+                 {it 1}))
+            :expect 1)
+
     (test "memoize 3"
             (let ((a 0))
                (awith (memoize [+ _ a] :expire 1)
@@ -571,6 +580,14 @@
                  (sleep 2)
                  {it 0}))
             :expect 1)
+
+    (test "memoize 3b"
+            (let ((a 0))
+               (awith (memoize [+ _ a] :expire 10)
+                 {it 0}
+                 (setf a 1)
+                 {it 0}))
+            :expect 0)
 
     (test "memoize 4"
             (let ((a 0))
@@ -589,9 +606,19 @@
                  (setf a 1)
                  {it 2}
                  {it 3}
-                 (list {it 0} {it 1})))
-            :expect (list 1 2))
-    )
+                 (list {it 1} {it 0})))
+            :expect (list 1 1))
+
+     (test "memoize 6 (multiple values)"
+            (let ((a 0))
+               (awith (memoize [values _ a] :remember-last 3)
+                 {it 0}
+                 {it 1}
+                 (setf a 1)
+                 {it 2}
+                 {it 3}
+                 (list (nbutlast (multiple-value-list {it 1}) 2) (nbutlast (multiple-value-list {it 0}) 2))))
+            :expect (list (list 1 0) (list 0 1))))
 
 
 (test-suite ("memoize to disk")

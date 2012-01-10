@@ -705,7 +705,9 @@
          (delete-file ,filename))))
 
 (defun trim (seq length)
-  {seq 0 (min (length seq) length)})
+  (if length
+      {seq 0 (min (length seq) length)}
+      seq))
 
 ;TODO: what if with is more than one char ??
 (defun rpad (string chars &key (with " "))
@@ -822,7 +824,7 @@
                      (ls path :recursive t :files-only t))
              (mapcar [rmdir _]
                      (sort (ls path :recursive t :dirs-only t)
-                           [f> (o #'length #'str) _ __]))
+                           #'> :key (o #'length #'str)))
              (rmdir path))
           (delete-file path))
       nil))
@@ -1124,7 +1126,7 @@
 (defun rm-oldest-files (dir regexp keep-nb)
     (let ((files (~ regexp (ls dir))))
        (when (> (length files) keep-nb)
-         (awith (sort files [f< #'file-write-date _ __])
+         (awith (sort files #'< :key #'file-write-date)
            (while (> (length it) keep-nb)
              (rm (pop it)))))))
 
@@ -1133,6 +1135,7 @@
         do (when (< (file-write-date f) time)
               (rm f))))
 
+;TODO: reecrire ca en tenant compte des bugfixes sur memoize + en faire un backend pour memoize ?
 (defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last expire)
   "Returns a disk memoized version of function <fn>. If <remember-last> is specified, it will limit the number of remembered results. If <expire> is specified, it will limit the number of seconds a result is remembered for. <force-reset> causes results from previous sessions to be discarded. <prefix> can be used to customize the prefix of cache files, and <dir> to change the directory of these files.
   
@@ -1160,10 +1163,10 @@
                     it)))))))
 
 (defun rm-oldest-entries (hash keep-nb)
-  (if (>= (hash-table-count hash) keep-nb)
-    (awith (sort (keys hash) [or (f< #'cadr  {hash _} {hash __})
-                                 (f< #'caddr {hash _} {hash __})])
-      (while (> (length it) keep-nb)
+  (when (>= (hash-table-count hash) keep-nb)
+    (awith (sort (keys hash) [or (< {{hash _} -2} {{hash __} -2})
+                                 (< {{hash _} -1} {{hash __} -1})])
+      (while (>= (length it) keep-nb)
          (remhash (pop it) hash)))))
 
 (defun rm-entries-older-than (hash time)
@@ -1181,22 +1184,19 @@
             (let ((utc (ut)))
               (when expire
                  (rm-entries-older-than cache (- utc expire)))
-              (when remember-last
-                 (rm-oldest-entries cache remember-last)
-                 (incf cycle)
-                 (when (= cycle most-positive-fixnum) (setf cycle 0)))
               (multiple-value-bind (val hit) (gethash args cache)
-                (if hit
-                    (progn
-                      (when (or remember-last expire)
-                         (setf {cache args} (list (car val) utc cycle)))
-                      (caddr val))
-                    (progn
-                      (when remember-last
-                           (rm-oldest-entries cache (- remember-last 1)))
-                      (apply #'values 
-                        (setf {cache args}
-                              (list (apply fn args) utc cycle)))))))))))
+                (when remember-last
+                   (rm-oldest-entries cache remember-last)
+                   (incf cycle)
+                   (when (= cycle most-positive-fixnum) (setf cycle 0)))
+                (apply #'values
+                  (if hit
+                      (let ((newval (append (nbutlast val 2) (list utc cycle))))
+                        (when (or remember-last expire)
+                           (setf {cache args} newval))
+                        newval)
+                      (setf {cache args}
+                            (append (multiple-value-list (apply fn args)) (list utc cycle)))))))))))
 
 (defmacro before (fn &rest body)
   "Redefines <fn> so that <body> gets executed first each time <fn> is called. <body> can access the arguments passed to fn through variable <args>. Will not work with inlined functions.
