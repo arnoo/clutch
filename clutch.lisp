@@ -26,7 +26,7 @@
               #:while #:awhile #:awith #:rlambda #:acond
               #:if-bind #:when-bind #:while-bind
               #:str #:lc #:uc #:ucfirst #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:trim #:lpad #:rpad #:strip #:lines #:str-replace
-              #:gulp #:ungulp #:gulplines #:with-each-fline #:mapflines #:file-lines
+              #:gulp #:ungulp #:gulplines #:with-each-fline #:mapflines #:file-lines #:filesize 
               #:f= #:f/= #:f> #:f< #:f<= #:f>= #:f-equal #:with-temporary-file #:it
               #:sh #:ls #:argv #:mkhash #:rm #:rmdir #:mkdir #:probe-dir #:getenv #:grep
               #:keys #:kvalues
