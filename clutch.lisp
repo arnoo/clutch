@@ -619,8 +619,7 @@
                                                    buf 0)))))))
 
 (defmacro with-each-fline ((path-or-stream &key (offset 0) limit as) &rest body)
-  "<args> should look like (path-or-stream &key (offset 0) limit)
-   Evaluates <body> for each line in <path-or-stream>, with the line
+  "Evaluates <body> for each line in <path-or-stream>, with the line
    available as <it>, and the line number as <@it>."
     (let ((linesymb (if as as 'it))
           (nbsymb (if as (symb '@ as) '@it)))
@@ -634,7 +633,7 @@
               ; we have to read the whole thing
               (let ((done-lines 0)
                     (,nbsymb offset))
-                (loop for ,linesymb in {(lines (gulp ,path-or-stream)) offset (+ offset limit -1)}
+                (loop for ,linesymb in {(lines (gulp ,path-or-stream)) offset (if limit (+ offset limit -1) -1)}
                       do ,@body
                          (incf ,nbsymb)
                          (incf done-lines))
@@ -935,7 +934,10 @@
          (date-h date)
          (date-m date)
          (date-s date)
-         (if (zerop (date-zone date)) "Z" (date-formatzone date))))
+         (if (zerop (date-zone date))
+             "Z"
+             (awith (date-formatzone date)
+               (str {it 0 3} ":" {it 2 -2})))))
 
 
 (defun date-rfc-2822 (&optional date)
