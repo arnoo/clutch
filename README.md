@@ -1,7 +1,9 @@
 Clutch
 ======
 
-This is the utility library I wrote as I was learning Common Lisp. I still use it all the time, and it evolves as I require new utilities. It still contains code that is not great, but works well enough that I have not taken the time to rewrite it.
+This is the utility library I wrote as I was learning Common Lisp. I still use it all the time, and it evolves as I require new utilities.
+
+Yet, it still contains code that is not great, but works well enough that I have not taken the time to rewrite it.
 
 I have released it under the GPL, in the hope that it can be useful to somebody, and that I might get suggestions for additions or improvements.
 
@@ -120,7 +122,7 @@ pushend, pushendnew and popend act like push, pushnew and pop but with the end o
 Anaphoric macros
 ----------------
 
-Theses are inspired by Paul Graham's book "On Lisp".
+These are inspired by Paul Graham's book "On Lisp".
 
 awith (form &rest body)
 Evaluates <body> with <it> bound to <form>.
