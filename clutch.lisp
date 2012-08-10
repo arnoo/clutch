@@ -562,7 +562,7 @@
             (loop for index = 0 then (+ index pos)
                   for pos = (read-sequence buf s)
                   with posoffset = (max 0 offset)
-                  for remoffset = posoffset then (- remoffset pos)
+                  for remoffset = posoffset then (max (- remoffset pos) 0)
                   while (and (plusp pos)
                              (or (not limit)
                                  (< index (+ limit 4096))))
