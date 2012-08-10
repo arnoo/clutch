@@ -21,6 +21,7 @@
     (:export  #:date #:d- #:d+ #:d-delta #:ut #:miltime #:y-m-d #:date-wom #:date-week #:to-zone
               #:date-rfc-2822 #:date-rfc-3339 #:date-gnu #:decode-duration #:encode-duration
               #:d= #:d/= #:d> #:d< #:d<= #:d>=
+              #:date-day #:date-year #:date-month #:date-h #:date-m #:date-s
               #:enable-arc-lambdas #:enable-brackets #:enable-compose #:defstruct-and-export 
               #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend
               #:while #:awhile #:awith #:rlambda #:acond
