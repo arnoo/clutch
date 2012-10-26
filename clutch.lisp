@@ -635,9 +635,9 @@
               (let ((done-lines 0)
                     (,nbsymb offset))
                 (loop for ,linesymb in {(lines (gulp ,path-or-stream)) offset (if limit (+ offset limit -1) -1)}
-                      do ,@body
-                         (incf ,nbsymb)
-                         (incf done-lines))
+                      do (progn ,@body
+                                (incf ,nbsymb)
+                                (incf done-lines)))
                 (return-from read-loop done-lines)))
             (with-stream (s ,path-or-stream)
                 (when (and (looks-like-file ,path-or-stream)
