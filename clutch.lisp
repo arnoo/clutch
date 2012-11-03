@@ -30,7 +30,7 @@
               #:gulp #:ungulp #:gulplines #:with-each-fline #:mapflines #:file-lines #:filesize 
               #:f= #:f/= #:f> #:f< #:f<= #:f>= #:f-equal #:with-temporary-file #:it
               #:sh #:ls #:argv #:mkhash #:rm #:rmdir #:mkdir #:probe-dir #:getenv #:grep
-              #:keys #:kvalues
+              #:keys #:kvalues #:email-error
               #:md5 #:sha1 #:sha256 #:uuid
               #:memoize #:memoize-to-disk #:before #:after #:o 
               #:+days+ #:+days-abbr+ #:+months+ #:+months-abbr+
@@ -44,6 +44,14 @@
 (defvar +months+ (list "" "January" "February" "March" "April" "May" "June" "July" "August" "September" "October" "November" "December"))
 (defvar +days-abbr+ (list "Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))
 (defvar +days+ (list "Monday" "Tuesday" "Wednesday" "Thursday" "Friday" "Saturday" "Sunday"))
+
+(defun email-error (address)
+  (let ((count@ 0))
+    (loop for i across address
+          when (char= i #\@)
+          do (incf count@))
+    (or (/= count@ 1)
+        (> (length address) 254))))
 
 (defmacro pushend (object lst)
   "Appends <object> to list <lst>"
