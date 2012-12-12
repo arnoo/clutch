@@ -625,7 +625,7 @@
 
   (test "memoize-to-disk 1"
       (let ((a 0))
-         (awith (memoize-to-disk [+ _ a])
+         (awith (memoize [+ _ a] :store (make-instance 'disk-store :force-reset t))
            {it 0}
            (setf a 1)
            {it 0}))
@@ -633,7 +633,7 @@
 
   (test "memoize-to-disk 2"
           (let ((a 0))
-             (awith (memoize-to-disk [progn (sleep 1) (+ _ a)] :remember-last 1)
+             (awith (memoize [progn (sleep 1) (+ _ a)] :remember-last 1 :store (make-instance 'disk-store :force-reset t))
                {it 0}
                (setf a 1)
                (list {it 1} {it 0})))
@@ -641,7 +641,7 @@
 
   (test "memoize-to-disk 3"
           (let ((a 0))
-             (awith (memoize-to-disk [+ _ a] :expire 1)
+             (awith (memoize [+ _ a] :expire 1 :store (make-instance 'disk-store :force-reset t))
                {it 0}
                (setf a 1)
                (sleep 2)
@@ -650,7 +650,7 @@
 
   (test "memoize-to-disk 4"
           (let ((a 0))
-             (awith (memoize-to-disk [progn (sleep 1) (+ _ a)] :remember-last 1 :expire 10)
+             (awith (memoize [progn (sleep 1) (+ _ a)] :remember-last 1 :expire 10 :store (make-instance 'disk-store :force-reset t))
                {it 0}
                (setf a 1)
                {it 1}
@@ -659,7 +659,7 @@
 
   (test "memoize-to-disk 5"
           (let ((a 0))
-             (awith (memoize-to-disk [progn (sleep 1) (+ _ a)] :remember-last 3)
+             (awith (memoize [progn (sleep 1) (+ _ a)] :remember-last 3 :store (make-instance 'disk-store :force-reset t))
                {it 0}
                (setf a 1)
                {it 1}
@@ -670,7 +670,7 @@
 
   (test "memoize-to-disk 6"
           (let ((a 0))
-             (awith (memoize-to-disk [progn (sleep 1) (+ _ a)] :remember-last 3)
+             (awith (memoize [progn (sleep 1) (+ _ a)] :remember-last 3 :store (make-instance 'disk-store :force-reset t))
                {it 0}
                {it 1}
                {it 2}
@@ -682,7 +682,7 @@
   (test "memoize-to-disk hash 2 args"
     (let ((h (mkhash 'a 1))
           (b 1))
-       (awith (memoize-to-disk [+ {_ 'a} b __])
+       (awith (memoize [+ {_ 'a} b __] :store (make-instance 'disk-store :force-reset t))
            {it h 0}
            (setf b 2)
            {it h 0}))
@@ -690,7 +690,7 @@
 
     (test "memoize-to-disk changing hash" ; Fails on ABCL (No CL-STORE)
       (let ((h (mkhash 'a 1)))
-           (awith (memoize-to-disk [_ 'a])
+           (awith (memoize [_ 'a] :store (make-instance 'disk-store :force-reset t))
                   {it h}
                   (setf {h 'a} 2)
                   {it h}))

@@ -32,7 +32,7 @@
               #:sh #:ls #:argv #:mkhash #:rm #:rmdir #:mkdir #:probe-dir #:getenv #:grep
               #:keys #:kvalues #:email-error
               #:md5 #:sha1 #:sha256 #:uuid
-              #:memoize #:memoize-to-disk #:before #:after #:o 
+              #:memoize #:disk-store #:hash-store  #:before #:after #:o 
               #:+days+ #:+days-abbr+ #:+months+ #:+months-abbr+
               #:xor #:?)
     #-abcl (:export #:getenv))
@@ -1135,80 +1135,103 @@
           (cl-store:store obj s))
   #+abcl(prin1-to-string obj))
 
-(defun rm-oldest-files (dir regexp keep-nb)
-    (let ((files (~ regexp (ls dir))))
-       (when (> (length files) keep-nb)
-         (awith (sort files #'< :key #'file-write-date)
-           (while (> (length it) keep-nb)
-             (rm (pop it)))))))
+(defclass store () ())
+(defclass hash-store (store) ((hash :accessor hash :initform (mkhash))))
+(defclass disk-store (store)
+  ((dir :accessor dir :initarg :dir :initform "/tmp")
+   (force-reset :accessor force-reset :initarg :force-reset)
+   (prefix :accessor prefix :initarg :prefix :initform "")))
 
-(defun rm-files-older-than (dir regexp time)
-  (loop for f in (~ regexp (ls dir))
+(defmethod memo-disk-fname ((store disk-store) args)
+  (str (dir store) "/" (prefix store) "#" (sha256 (serialize args))))
+
+(defmethod memo-disk-fre ((store disk-store))
+  (str "/\\/" (prefix store) "#[^\\/]+$/"))
+
+(defmethod initialize-instance :after ((store disk-store) &key)
+  (unless (prefix store)
+    (setf (prefix store) (str "clutch-mem-" (uuid)))
+    (setf (force-reset store) t))
+  (when (force-reset store) (mapcar #'rm (~ (memo-disk-fre store) (ls (dir store))))))
+
+(defmethod memo-store ((store hash-store) key value)
+  (setf {(hash store) key} value)
+  value)
+
+(defmethod memo-store ((store disk-store) key value)
+  (let ((file (memo-disk-fname store key)))
+    #+abcl(ungulp file value :readable t) #-abcl(cl-store:store value file))
+  value)
+
+(defmethod memo-rm-entries-older-than ((store hash-store) time)
+  (loop for call in (keys (hash store))
+          do (when (< (cadr {(hash store) call}) time)
+               (remhash call (hash store)))))
+
+(defmethod memo-rm-entries-older-than ((store disk-store) time)
+  (loop for f in (~ (memo-disk-fre store)
+                    (ls (dir store)))
         do (when (< (file-write-date f) time)
               (rm f))))
 
-;TODO: reecrire ca en tenant compte des bugfixes sur memoize + en faire un backend pour memoize ?
-(defun memoize-to-disk (fn &key (dir "/tmp") prefix force-reset remember-last expire)
-  "Returns a disk memoized version of function <fn>. If <remember-last> is specified, it will limit the number of remembered results. If <expire> is specified, it will limit the number of seconds a result is remembered for. <force-reset> causes results from previous sessions to be discarded. <prefix> can be used to customize the prefix of cache files, and <dir> to change the directory of these files.
-  
-  Warning : remember-last uses file write dates to determine call order. If the function takes less than a second to return, the order of forgetting calls is not guaranteed.
-    Arguments and results are limited to what can be serialized using cl-store. Function arguments or return values are out. cl-store does not work on ABCL yet, so use on abcl is limited.
-  "
-  (unless prefix
-    (setf prefix (str "clutch-mem-" (uuid)))
-    (setf force-reset t))
-  (let ((fre (str "/\\/" prefix "#[^\\/]+$/")))
-    (when force-reset (mapcar #'rm (~ fre (ls dir))))
-    #'(lambda (&rest args) 
-        (let ((file (str dir "/" prefix "#" (sha256 (serialize args)))))
-           (when expire
-             (rm-files-older-than dir fre (ut)))
-           (when remember-last
-             (rm-oldest-files dir fre remember-last))
-           (if (ls file)
-               (progn #+abcl(read-from-string (gulp file)) #-abcl(cl-store:restore file))
-               (progn
-                  (when remember-last
-                    (rm-oldest-files dir fre (- remember-last 1)))
-                  (awith (apply fn args)
-                    #+abcl(ungulp file it :readable t) #-abcl(cl-store:store it file)
-                    it)))))))
+(defmethod memo-rm-oldest-entries ((store hash-store) keep-nb)
+  (when (>= (hash-table-count (hash store)) keep-nb)
+      (awith (sort (keys (hash store)) [or (< {{(hash store) _} -2} {{(hash store) __} -2})
+                                   (< {{(hash store) _} -1} {{(hash store) __} -1})])
+        (while (>= (length it) keep-nb)
+           (remhash (pop it) (hash store))))))
 
-(defun rm-oldest-entries (hash keep-nb)
-  (when (>= (hash-table-count hash) keep-nb)
-    (awith (sort (keys hash) [or (< {{hash _} -2} {{hash __} -2})
-                                 (< {{hash _} -1} {{hash __} -1})])
-      (while (>= (length it) keep-nb)
-         (remhash (pop it) hash)))))
+(defmethod memo-rm-oldest-entries ((store disk-store) keep-nb)
+  (let ((files (~ (memo-disk-fre store)
+                  (ls (dir store)))))
+     (when (>= (length files) keep-nb)
+       (awith (sort files #'< :key #'file-write-date)
+         (while (>= (length it) keep-nb)
+           (rm (pop it)))))))
 
-(defun rm-entries-older-than (hash time)
-  (loop for call in (keys hash)
-        do (when (< (cadr {hash call}) time)
-             (remhash call hash))))
+(defmethod memo-get ((store hash-store) key)
+  (gethash key (hash store)))
 
-(defun memoize (fn &key remember-last expire)
+(defmethod memo-get ((store disk-store) key)
+  (let* ((file (memo-disk-fname store key))
+         (existsp (ls file)))
+    (values (when existsp
+               (progn #+abcl(read-from-string (gulp file))
+                      #-abcl(cl-store:restore file)))
+            existsp)))
+
+(defmethod memo-rm ((store hash-store) key)
+  (remhash key (hash store)))
+
+(defmethod memo-rm ((store disk-store) key)
+  (awith (memo-disk-fname store key)
+    (when (ls it)
+       (rm i))))
+
+(defun memoize (fn &key remember-last expire store)
   "Returns a memoized version of function <fn>. If <remember-last> is specified, it will limit the number of remembered results. If <expire> is specified, it will limit the number of seconds a result is remembered for."
-  (let ((cache (mkhash))
+  (let ((cache (or store (make-instance 'hash-store)))
         (cycle 0))
      #'(lambda (&rest args)
           (if (eq (first (last args 2)) :_expire_entry)
-            (remhash args cache)
+            (memo-rm cache args)
             (let ((utc (ut)))
               (when expire
-                 (rm-entries-older-than cache (- utc expire)))
-              (multiple-value-bind (val hit) (gethash args cache)
+                 (memo-rm-entries-older-than cache (- utc expire)))
+              (multiple-value-bind (val hit) (memo-get cache args)
                 (when remember-last
-                   (rm-oldest-entries cache remember-last)
+                   (memo-rm-oldest-entries cache remember-last)
                    (incf cycle)
                    (when (= cycle most-positive-fixnum) (setf cycle 0)))
                 (apply #'values
                   (if hit
                       (let ((newval (append (nbutlast val 2) (list utc cycle))))
                         (when (or remember-last expire)
-                           (setf {cache args} newval))
+                           (memo-store cache args newval))
                         newval)
-                      (setf {cache args}
-                            (append (multiple-value-list (apply fn args)) (list utc cycle)))))))))))
+                      (memo-store cache
+                                  args
+                                  (append (multiple-value-list (apply fn args)) (list utc cycle)))))))))))
 
 (defmacro before (fn &rest body)
   "Redefines <fn> so that <body> gets executed first each time <fn> is called. <body> can access the arguments passed to fn through variable <args>. Will not work with inlined functions.
