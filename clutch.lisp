@@ -1139,7 +1139,7 @@
 (defclass hash-store (store) ((hash :accessor hash :initform (mkhash))))
 (defclass disk-store (store)
   ((dir :accessor dir :initarg :dir :initform "/tmp")
-   (force-reset :accessor force-reset :initarg :force-reset)
+   (force-reset :accessor force-reset :initarg :force-reset :initform nil)
    (prefix :accessor prefix :initarg :prefix :initform "")))
 
 (defmethod memo-disk-fname ((store disk-store) args)
@@ -1196,8 +1196,8 @@
   (let* ((file (memo-disk-fname store key))
          (existsp (ls file)))
     (values (when existsp
-               (progn #+abcl(read-from-string (gulp file))
-                      #-abcl(cl-store:restore file)))
+               #+abcl(read-from-string (gulp file))
+               #-abcl(cl-store:restore file))
             existsp)))
 
 (defmethod memo-rm ((store hash-store) key)
@@ -1206,7 +1206,7 @@
 (defmethod memo-rm ((store disk-store) key)
   (awith (memo-disk-fname store key)
     (when (ls it)
-       (rm i))))
+       (rm it))))
 
 (defun memoize (fn &key remember-last expire store)
   "Returns a memoized version of function <fn>. If <remember-last> is specified, it will limit the number of remembered results. If <expire> is specified, it will limit the number of seconds a result is remembered for."
@@ -1224,14 +1224,16 @@
                    (incf cycle)
                    (when (= cycle most-positive-fixnum) (setf cycle 0)))
                 (apply #'values
-                  (if hit
-                      (let ((newval (append (nbutlast val 2) (list utc cycle))))
-                        (when (or remember-last expire)
-                           (memo-store cache args newval))
-                        newval)
-                      (memo-store cache
-                                  args
-                                  (append (multiple-value-list (apply fn args)) (list utc cycle)))))))))))
+                  (butlast
+                    (if hit
+                        (progn
+                          (when (or remember-last expire)
+                             (memo-store cache args (append (butlast val 2) (list utc cycle))))
+                          val)
+                        (memo-store cache
+                                    args
+                                    (append (multiple-value-list (apply fn args)) (list utc cycle))))
+                    2))))))))
 
 (defmacro before (fn &rest body)
   "Redefines <fn> so that <body> gets executed first each time <fn> is called. <body> can access the arguments passed to fn through variable <args>. Will not work with inlined functions.

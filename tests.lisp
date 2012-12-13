@@ -617,7 +617,7 @@
                  (setf a 1)
                  {it 2}
                  {it 3}
-                 (list (nbutlast (multiple-value-list {it 1}) 2) (nbutlast (multiple-value-list {it 0}) 2))))
+                 (list (multiple-value-list {it 1}) (multiple-value-list {it 0}))))
             :expect (list (list 1 0) (list 0 1))))
 
 
