@@ -705,9 +705,9 @@
                   (t            (pushend (list (probe-file path) @it matches) result))))))
         result)))
 
-(defmacro with-temporary-file ((filename extension) &rest body)
+(defmacro with-temporary-file ((filename &optional extension) &rest body)
   "Evaluates <body> with a temporary file. <filename> is the variable you want to assign the filename to, and <extension> the extension you want the temporary file to have."
-  `(let ((,filename (str "/tmp/highres_" (get-internal-real-time) (random 100) "." ,extension)))
+  `(let ((,filename (str "/tmp/highres_" (get-internal-real-time) (random 100) ,(if extension (str "." extension) ""))))
       (prog1
          (progn
             ,@body)
@@ -737,7 +737,9 @@
 ; note : it might be nice to return (values stdin stdout) ?
 (defun sh (command)
   "run a command and read its output."
+  ;(asdf:run-program )
   (with-input-from-string (ar command)
+    #+ecl (with-temporary-file (fname) (ext:system (str command " &> '" fname "'")) (gulp fname))
     #+allegro (with-output-to-string (s) (excl:run-shell-command +shell+ :output s :wait t :input ar))
     #+clisp   (with-output-to-string (s)
                 (let ((out (ext:run-program "/bin/sh" :arguments () :input ar :wait t :output :stream)))
@@ -746,7 +748,7 @@
     #+sbcl    (with-output-to-string (s) (sb-ext:run-program +shell+ () :input ar :output s :error s :wait t))
     #+ccl     (with-output-to-string (s) (ccl:run-program +shell+ () :wait t :output s :error t :input ar))
     #+abcl    (with-output-to-string (s) (ext:run-shell-command (str +shell+ " -c \"" (~s "/\"/\\\"/g" command) "\"") :output s))
-    #-(or allegro clisp cmu sbcl ccl abcl)
+    #-(or allegro clisp cmu sbcl ccl abcl ecl)
               (error 'not-implemented :proc (list 'pipe-input prog args))))
 
 ; get-env from stumpwm (GPL) (also found in the CL cookbook) 
@@ -783,10 +785,11 @@
 
 ; argv adapted from CL-cookbook
 (defun argv (&optional index)
-  (let ((args (or #+sbcl                    sb-ext:*posix-argv*  
-                  #+lispworks               system:*line-arguments-list*
-                  #+cmu                     extensions:*command-line-words*
-                  #-(or sbcl lispworks cmu) (error 'not-implemented :proc (list 'getenv var)))))
+  (let ((args (or #+sbcl         sb-ext:*posix-argv*  
+                  #+lispworks    system:*line-arguments-list*
+                  #+cmu          extensions:*command-line-words*
+                  #+ecl          (ext:command-args)
+                  #-(or sbcl lispworks cmu ecl) (error 'not-implemented :proc (list 'getenv var)))))
     (awhen args
        (if index (nth index it) it))))
 
