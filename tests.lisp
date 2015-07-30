@@ -16,9 +16,11 @@
 ;
 
 (require 'clutch)
+(require 'clutch-date)
+(require 'simple-date)
 (require 'cleanser)
 
-(defpackage :clutch-tests (:use #:cl #:clutch #:cleanser))
+(defpackage :clutch-tests (:use #:cl #:clutch #:cleanser #:simple-date #:clutch-date))
 (in-package :clutch-tests)
 
 (setf cleanser:*quiet* t)
@@ -706,149 +708,34 @@
        (test "ut now"
          (ut "now")
          :expect (get-universal-time))
-   
+       
+       (test "now"
+         (timestamp-to-universal-time (now))
+         :expect (get-universal-time))
+
+       (test "now+"
+         (timestamp-to-universal-time (now+))
+         :expect (get-universal-time))
+
        (test "ut January 22 1964 23:12 +0200"
          (ut "January 22 1964 23:12 +0200")
          :expect (encode-universal-time 0 12 23 22  1 1964 -2))
    
-       (test "ut (date)"
-         (ut (date))
-         :expect (get-universal-time))
-   
-       (test "ut (date :str \"now\")"
-         (ut (date :str "now"))
-         :expect (get-universal-time))
-
-       (test "ut (date :miltime 1245)"
-         (ut (date :miltime 1245))
-         :expect (ut (date :str "12:45")))
-
        (test "miltime"
-         (miltime (date :str "12:45"))
+         (miltime (encode-timestamp 1964 03 01 12 45))
          :expect 1245.0)
    
-       (test "date-week (date January 22 1964 23:12)"
-         (date-week (date :str "January 22 1964 23:12"))
-         :expect 4)
-   
-       (test "date-wom (date January 22 1964 23:12)"
-         (date-wom (date :str "January 22 1964 23:12"))
-         :expect 4)
-   
-       (test "ut (date January 22 1964 23:12 +0200)"
-         (ut (date :str "January 22 1964 23:12 +0200"))
-         :expect (encode-universal-time 0 12 23 22  1 1964 -2))
-   
-       (test "d<"
-         (d< (date :str "January 22 1964 23:12")
-             (date :str "January 23 1964 23:12")
-             (date :str "January 24 1964 23:12"))
-         :expect t)
-   
-       (test "d< 2"
-         (d< (date :str "January 24 1964 23:12")
-             (date :str "January 22 1964 23:12"))
-         :expect nil)
-   
-       (test "d>"
-         (d> (date :str "January 22 1964 23:12")
-             (date :str "January 24 1964 23:12"))
-         :expect nil)
-   
-       (test "d> 2"
-         (d> (date :str "January 24 1964 23:12")
-             (date :str "January 23 1964 23:12")
-             (date :str "January 22 1964 23:12"))
-         :expect t)
-   
-       (test "d="
-         (d= (date :str "January 22 1964 23:12")
-             (date :str "January 24 1964 23:12"))
-         :expect nil)
-   
-       (test "d= 2"
-         (d= (date :str "January 24 1964 23:12")
-             (date :str "January 24 1964 23:12"))
-         :expect t)
-   
-       (test "d/="
-         (d/= (date :str "January 22 1964 23:12")
-             (date :str "January 24 1964 23:12"))
-         :expect t)
-   
-       (test "d/= 2"
-         (d/= (date :str "January 24 1964 23:12")
-             (date :str "January 24 1964 23:12"))
-         :expect nil)
-   
-       (test "d-delta"
-         (d-delta (date :str "January 24 1964 23:12")
-                  (date :str "January 24 1964 22:12"))
-         :expect 3600)
-
        (test "y-m-d"
-         (y-m-d (date :str "March 1 1964"))
+         (y-m-d (encode-timestamp 1964 03 01))
          :expect "1964-03-01")
 
-       (test "date-gnu"
-         (date-gnu (date :str "Wed, 24 Jun 1992 22:12:00 +0200" :zone -2) "%s")
-         :expect "709416720")
+       (test "date-format-gnu"
+         (date-format-gnu (encode-timestamp 1992 06 24 22 12 00) "%s")
+         :expect "709423920")
 
        (test "date-rfc-2822"
-         (date-rfc-2822 (date :str "Wed, 24 Jun 1992 22:12:00 +0200" :zone -2))
-         :expect "Wed, 24 Jun 1992 22:12:00 +0200")
-
-       (test "d+"
-         (d+ (date :str "January 24 1964 23:12") (* 60 22))
-         :expect (date :str "January 24 1964 23:34")
-         :test #'d=)
-
-       (test "d<="
-         (d<= (date :str "December 24 1954 23:12") (date :str "January 14 1924 23:12"))
-         :expect nil)
-
-       (test "d<= 2"
-         (d<= (date :str "February 14 1924 23:12") (date :str "December 24 1954 23:12"))
-         :expect t)
-
-       (test "d<= 3"
-         (d<= (date :str "December 24 1954 23:12") (date :str "December 24 1954 23:12"))
-         :expect t)
-
-       (test "d>="
-         (d>= (date :str "January 24 1964 23:12") (date :str "July 11 1924 23:12"))
-         :expect t)
-
-       (test "d>= 2"
-         (d>= (date :str "July 11 1924 23:12") (date :str "January 24 1964 23:12"))
-         :expect nil)
-
-       (test "d>= 3"
-         (d>= (date :str "January 24 1964 23:12") (date :str "January 24 1964 23:12"))
-         :expect t)
-
-       (test "decode-duration"
-         (decode-duration "22s")
-         :expect 22)
-
-       (test "decode-duration 2"
-         (decode-duration "1y 2M 3w 5d 4h 5m 22s")
-         :expect (+ 22 (* 5 60) (* 4 3600) (* 5 3600 24) (* 3 3600 24 7) (* 3600 24 365) (* 2 3600 24 30)))
-
-       (test "encode-duration"
-         (encode-duration 22)
-         :expect "22s")
-
-       (awith (+ 22 (* 5 60) (* 4 3600) (* 5 3600 24) (* 3 3600 24 7) (* 3600 24 365) (* 2 3600 24 30))
-         (test "encode-duration 2"
-             (decode-duration (encode-duration it))
-             :expect it))
-
-       (test "to-zone"
-         (let* ((d  (date :str "Wed, 24 Jun 1992 22:12:00 +0200"))
-                (d2 (to-zone d 3)))
-            (list (d-delta d2 d) (date-zone d2)))
-         :expect (list 0 3))
+         (date-rfc-2822 (encode-timestamp 1992 06 24 22 12 00))
+         :expect "Wed, 24 Jun 1992 22:12:00 +0000")
        )
 
 (test-suite ("f= f> f< ...")

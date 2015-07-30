@@ -17,25 +17,19 @@
 
 (in-package :cl-user)
 
-(defpackage :clutch-asd
+(defpackage :clutch-date-asd
   (:use :cl :asdf))
 
-(in-package :clutch-asd)
+(in-package :clutch-date-asd)
 
-(defsystem :clutch
-  :name "clutch"
+(defsystem :clutch-date
+  :name "clutch-date"
   :maintainer "Arnaud Betremieux"
   :licence "GPL"
   :serial t
   :version 0.1
-  :components ((:file "clutch"))
-  :depends-on (:cl-ppcre-unicode
-               :ironclad
-               :uuid
-               :anaphora
-               #-abcl :flexi-streams
-               #-abcl :cl-store
-               #+sbcl :drakma
-               #+sbcl :sb-posix
-               #+sbcl :closer-mop)
+  :components ((:file "clutch-date"))
+  :depends-on (:clutch
+               :cffi
+               :simple-date)
   )

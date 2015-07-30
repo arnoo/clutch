@@ -1,5 +1,5 @@
 ;
-;   Copyright 2011 Arnaud Betremieux <arno@arnoo.net>, except where
+;   Copyright 2015 Arnaud Bétrémieux <arnaud@btmx.fr>, except where
 ;   mentioned otherwise.
 ;
 ;   The program in this file is free software: you can redistribute it
@@ -17,33 +17,26 @@
 ;
 
 (defpackage :clutch
-    (:use     #:cl #:anaphora)
-    (:export  #:date #:d- #:d+ #:d-delta #:ut #:miltime #:y-m-d #:date-wom #:date-week #:to-zone
-              #:date-rfc-2822 #:date-rfc-3339 #:date-gnu #:decode-duration #:encode-duration
-              #:d= #:d/= #:d> #:d< #:d<= #:d>=
-              #:date-day #:date-year #:date-month #:date-h #:date-m #:date-s
-              #:enable-arc-lambdas #:enable-brackets #:enable-compose #:defstruct-and-export 
-              #:in #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend
+    (:use     #:cl)
+    (:export  #:enable-arc-lambdas #:enable-brackets #:enable-compose #:defstruct-and-export 
+              #:in #:group #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend
               #:while #:awhile #:awith #:rlambda #:acond
-              #:if-bind #:when-bind #:while-bind
+              #:if-bind #:when-bind #:while-bind #:aif #:awhen #:aand #:it
               #:str #:lc #:uc #:ucfirst #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:trim #:lpad #:rpad #:strip #:lines #:str-replace
               #:gulp #:ungulp #:gulplines #:with-each-fline #:mapflines #:file-lines #:filesize 
-              #:f= #:f/= #:f> #:f< #:f<= #:f>= #:f-equal #:with-temporary-file #:it
+              #:f= #:f/= #:f> #:f< #:f<= #:f>= #:f-equal #:with-temporary-file
               #:sh #:ls #:argv #:mkhash #:rm #:rmdir #:mkdir #:probe-dir #:getenv #:grep
               #:keys #:kvalues #:email-error
               #:md5 #:sha1 #:sha256 #:uuid
               #:memoize #:disk-store #:hash-store  #:before #:after #:o 
-              #:+days+ #:+days-abbr+ #:+months+ #:+months-abbr+
+              #:d-b
               #:xor #:?)
+    (:import-from #:anaphora #:aif #:awhen #:it #:aand)
     #-abcl (:export #:getenv))
 
 (in-package :clutch)
 
 (defvar +shell+ "/bin/bash")
-(defvar +months-abbr+ (list "" "Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec"))
-(defvar +months+ (list "" "January" "February" "March" "April" "May" "June" "July" "August" "September" "October" "November" "December"))
-(defvar +days-abbr+ (list "Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))
-(defvar +days+ (list "Monday" "Tuesday" "Wednesday" "Thursday" "Friday" "Saturday" "Sunday"))
 
 (defun email-error (address)
   (let ((count@ 0))
@@ -281,9 +274,18 @@
   (mapcar (lambda (x) (access object x))
           places))
 
-(defun in (seq obj &key (test #'equal))
+(defun in (seq obj &key (test #'equal)) ;TODO !!!
 	"Returns t if <seq> contains <obj> (using equality test <test>)"
 	(not (null (position obj seq :test test))))
+
+(defun group (lst fn &key (test #'equal))
+  (let ((result (make-hash-table :test test)))
+    (loop for elt in lst
+          for fnelt = (funcall fn elt)
+          do (unless (nth-value 1 (gethash fnelt result))
+                (setf (gethash fnelt result) nil))
+             (pushend elt (gethash fnelt result) ))
+    result))
 
 ;
 ; Anaphoric macros
@@ -298,7 +300,7 @@
     (let ((blockname (gensym)))
         `(block ,blockname
               ,@(loop for form in forms
-                        collect `(awhen ,(car form) (return-from ,blockname ,(cadr form))))
+                        collect `(awhen ,(car form) (return-from ,blockname (progn ,(cadr form)))))
                     nil)))
 
 (defmacro if-bind ((var test) then &optional else)
@@ -515,7 +517,7 @@
    `(cond ((streamp ,path-or-stream)
              (let ((,name ,path-or-stream))
                 ,@body))
-          #-abcl
+          #+sbcl
           ((and (stringp ,path-or-stream) 
                 (> (length ,path-or-stream) 5)
                 (string-equal {,path-or-stream 0 7} "http://"))
@@ -601,7 +603,7 @@
                             :if-does-not-exist :create)
       (if (and (not readable)
                (or (stringp object)
-                   (and (vectorp object) binary)))
+                   (and (or (listp object) (vectorp object)) binary)))
         (write-sequence object stream)
         (prin1 object stream)))
     t))
@@ -925,202 +927,14 @@
          (5 (uuid:make-v5-uuid (uuid-ns ns) name))  ; name based SHA1
          (otherwise (error "Incorrect UUID version : ~A" v)))))
 
-(defstruct-and-export date
-  s m h
-  dow day month year
-  dst zone)
+(defun ut ()
+  (get-universal-time))
 
-(defun date-formatzone (date)
-  "Returns a 4 figure zone string starting with + or -"
-  (~s "/^(\\d)/+\\1/"
-      (~s "/^(-|)(\\d{3})$/\\{1}0\\2/"
-          (str (* -100 (+ (if (date-dst date) -1 0)
-                              (date-zone date)))))))
+(defmacro d-b (pattern values &body body)
+  `(destructuring-bind ,pattern ,values ,@body))
 
-(defun date-rfc-3339 (&optional date)
-  "Returns a date in the RFC-3339 format : 1937-01-01T12:00:27.87+00:20"
-  (unless date (setf date (date)))
-  (format nil "~4,'0D-~2,'0D-~2,'0DT~2,'0D:~2,'0D:~2,'0D~A"
-         (date-year date)
-         (date-month date)
-         (date-day date)
-         (date-h date)
-         (date-m date)
-         (date-s date)
-         (if (zerop (date-zone date))
-             "Z"
-             (awith (date-formatzone date)
-               (str {it 0 3} ":" {it 2 -2})))))
-
-
-(defun date-rfc-2822 (&optional date)
-  "Returns a date in the RFC-2822 format : Mon, 07 Aug 2006 12:34:56 -0600"
-  (unless date (setf date (date)))
-  (format nil "~A, ~2,'0D ~A ~4,'0D ~2,'0D:~2,'0D:~2,'0D ~A"
-       {+days-abbr+ (date-dow date)}
-       (date-day date)
-       {+months-abbr+ (date-month date)}
-       (date-year date)
-       (date-h date)
-       (date-m date)
-       (date-s date)
-       (date-formatzone date)))
-
-(defun date-gnu (date format)
-  (strip (sh (str "date -d '" (date-rfc-2822 date) "' +'" format "'"))))
-
-(defun strtout (str)
-  "Converts a string to a Common Lisp universal-time"
-  (let ((result (sh (str "date -d \"" str "\" +%s"))))
-    (if (/~ "/^(-|)\\d+\\n$/" result)
-      (error "Invalid date string : ~A" str)
-      (+ (read-from-string result) 2208988800))))
-
-(defun date (&key ut miltime str zone)
-  "Returns a date structure based on either Common Lisp universal-time <ut>, 'military' (i.e. 1234 for today 12:34) time <miltime>, or string <str>, in timezone <zone>."
-  (multiple-value-bind (us um uh uday umonth uyear udow udaylight-p uzone)
-                       (decode-universal-time 
-                          (if (or ut str miltime)
-                            (acond
-                              (str (strtout it))
-                              (miltime (let ((milstr (lpad (str it) 4 :with 0)))
-                                          (strtout (str {milstr 0 2} ":" {milstr 2 4}))))
-                              (ut ut))
-                            (get-universal-time))
-                          zone)
-  (make-date
-	  :s      us
-	  :m      um
-	  :h      uh
-	  :day    uday
-	  :month  umonth
-	  :year   uyear
-	  :dow    udow
-	  :dst    udaylight-p
-	  :zone   uzone
-  )))
-
-(defun ut (&optional str-or-date &key zone)
-  "Returns the current Common Lisp universal-time, or if <str-or-date> is specified, the universal-time described by that string or date structure"
-  (if str-or-date
-    (if (stringp str-or-date)
-      (strtout str-or-date)
-      (encode-universal-time
-         (date-s str-or-date)
-         (date-m str-or-date)
-         (date-h str-or-date)
-         (date-day str-or-date)
-         (date-month str-or-date)
-         (date-year str-or-date)
-         (+ (date-zone str-or-date) (if (date-dst str-or-date) 1 0))
-         ))
-    (get-universal-time)))
-
-(defun d-delta (date1 date2)
-  "Delta in seconds between <date1> and <date2>"
-  (- (ut date1) (ut date2)))
-
-(defun decode-duration (duration)
-  "Transforms a duration string : '1m 1d'... into an approximated number of seconds"
-  (if (numberp duration)
-      duration
-      (apply #'+ (mapcar (lambda (dur)
-                            (if (~ "/^\d+$/" dur) 
-                                dur
-                                (* (cond 
-                                      ((~ "/s$/i" dur) 1)
-                                      ((~ "/m$/ " dur) 60)
-                                      ((~ "/h$/i" dur) 3600)
-                                      ((~ "/d$/i" dur) (* 24 3600))
-                                      ((~ "/w$/i" dur) (* 7 24 3600))
-                                      ((~ "/M$/ " dur) (* 30 24 3600))
-                                      ((~ "/y$/i" dur) (* 365 24 3600))
-                                      (t (error "Can't decode duration")))
-                                   (parse-integer {dur 0 -2}))))
-                         (split " " duration)))))
-
-(defun encode-duration (duration)
-  "Transforms a number of seconds into a duration string : '1m 1d'... into an approximated number of seconds"
-  (~s "/\\s+$//"
-     (let* ((du duration)
-         (y  (floor du (* 365 24 3600)))
-         (du (if (plusp du) (rem du (* 365 24 3600)) 0))
-         (mo (floor du (* 30 24 3600)))
-         (du (if (plusp du) (rem du (* 30 24 3600)) 0))
-         (w  (floor du (* 7 24 3600)))
-         (du (if (plusp du) (rem du (* 7 24 3600)) 0))
-         (d  (floor du (* 24 3600)))
-         (du (if (plusp du) (rem du (* 24 3600)) 0))
-         (h  (floor du 3600))
-         (du (if (plusp du) (rem du 3600) 0))
-         (m  (floor du 60))
-         (s  (if (plusp du) (rem du 60) 0)))
-        (str (if (plusp y)  (str y  "y "))
-             (if (plusp mo) (str mo "M "))
-             (if (plusp w)  (str w  "w "))
-             (if (plusp d)  (str d  "d "))
-             (if (plusp h)  (str h  "h "))
-             (if (plusp m)  (str m  "m "))
-             (if (plusp s)  (str s  "s"))))))
-
-(defun d+ (date duration)
-  "Adds a number of seconds or a duration string : '1m 1d'... to a date
-   Warning : approximative for duration strings"
-  (date :ut (+ (ut date) (if (numberp duration) duration (decode-duration duration)))
-        :zone (date-zone date)))
-
-(defun d- (date duration)
-  "Removes a number of seconds or a duration string : '1m 1d'... from a date
-   Warning : approximative for duration strings"
-  (d+ date (- (if (numberp duration) duration (decode-duration duration)))))
-
-(defun d> (&rest dates)
-  "Are <dates> in strict reverse order ?"
-  (apply #'> (mapcar #'ut dates)))
-
-(defun d< (&rest dates)
-  "Are <dates> in strict order ?"
-  (apply #'< (mapcar #'ut dates)))
-
-(defun d>= (&rest dates)
-  "Are <dates> in reverse order ?"
-  (apply #'>= (mapcar #'ut dates)))
-
-(defun d<= (&rest dates)
-  "Are <dates> in order ?"
-  (apply #'<= (mapcar #'ut dates)))
-
-(defun d= (&rest dates)
-  "Are <dates> identical ?"
-  (apply #'= (mapcar #'ut dates)))
-
-(defun d/= (&rest dates)
-  "Are <dates> different ?"
-  (apply #'/= (mapcar #'ut dates)))
-
-(defun date-week (date)
-  "ISO week number, with Monday as first day of week (1..53)"
-  (read-from-string (sh (str "date -d '" (date-rfc-2822 date) "' +%V"))))
-
-(defun date-wom (date)
-  "Week of month (1..5)"
-  (- (date-week date) (date-week (d- date (str (- (date-day date) 1) "d"))) -1))
-
-(defun miltime (&optional (d (date)))
-  "Returns a 'military' time format for date : 1243,22 for 12:43:22"
-  (float (+ (* 100 (date-h d))
-            (date-m d)
-            (/ (date-s d) 100))))
-  
-(defun to-zone (date zone)
-  "Convert date to timezone zone"
-  (date :ut (ut date) :zone zone))
-
-(defun y-m-d (date)
-  "Date in format YYYY-MM-DD"
-  (str (lpad (date-year  date) 4 :with 0) "-"
-       (lpad (date-month date) 2 :with 0) "-"
-       (lpad (date-day   date) 2 :with 0)))
+(defmacro m-v-b (vars values &body body)
+  `(multiple-value-bind ,vars ,values ,@body))
 
 (defmacro xor (&rest args)
   "Exclusive OR : returns nil if nothing or more than one element in args is true, returns the only true element overwise. If more than one element is found to be true, the rest is not evaluated."
@@ -1218,7 +1032,7 @@
      #'(lambda (&rest args)
           (if (eq (first (last args 2)) :_expire_entry)
             (memo-rm cache args)
-            (let ((utc (ut)))
+            (let ((utc (get-universal-time)))
               (when expire
                  (memo-rm-entries-older-than cache (- utc expire)))
               (multiple-value-bind (val hit) (memo-get cache args)
@@ -1265,3 +1079,4 @@
                (lambda (&rest args)
                  (prog1 (apply ,sym args)
                         ,@body)))))))
+

@@ -1,17 +1,11 @@
 Clutch
 ======
 
-This is the utility library I wrote as I was learning Common Lisp. I still use it all the time, and it evolves as I require new utilities.
+My personal Common Lisp utility. 
 
-Yet, it still contains code that is not great, but works well enough that I have not taken the time to rewrite it.
+A lot of it was written while I was learning Common Lisp, which means that the code that is not great, but it works well enough that I have not taken the time to rewrite it.
 
-I have released it under the GPL, in the hope that it can be useful to somebody, and that I might get suggestions for additions or improvements.
-
-Most functions should work pretty well on SBCL and ABCL, which are the two implementations I use regularly. There is code specific to other implementations in some places, usually because it comes from other people, but I have never tested any of it.
-
-There is a test suite (tests.lisp), based on my test library (cleanser), that should cover most of the code.
-
-Some date functions rely on the GNU 'date' program. While a bit ugly and non-portable, this works well enough for my purposes right now, and would be too complex to rewrite.
+Date functions use simple-date from Postmodern.
 
 
 There are two main reader macros : {} and [].
@@ -344,60 +338,6 @@ Functions "before" and "after" attach code to be executed respectively before an
 Date manipulations
 ------------------
 
-Clutch introduces a date structure with the following slots :
-
-    s      seconds
-    m      minutes
-    h      hours
-    day    day of the month
-    month  month
-    year   year
-    dow    day of week (0 for Sunday to 6)
-    dst    t or nil for DST or not
-    zone   timezone (hours to add to UTC, not counting DST ###)
-
-Date structures can be created with the "date" function :
-
-Creating a date from a Common Lisp universal time :
-
-    > (date :ut 3506915075)
-    #S(DATE :S 35 :M 4 :H 8 :DOW 3 :DAY 17 :MONTH 2 :YEAR 2011 :DST NIL :ZONE -1)
-
-Creating a date from a "military time" (today) :
-
-    > (date :miltime 2302)
-    #S(DATE :S 0 :M 02 :H 23 :DOW 3 :DAY 17 :MONTH 2 :YEAR 2011 :DST NIL :ZONE -1)
-
-Creating a date from a string :
-
-    > (date :str "now")
-    #S(DATE :S 35 :M 4 :H 8 :DOW 3 :DAY 17 :MONTH 2 :YEAR 2011 :DST NIL :ZONE -1)
-
-Date structures can be compared with with d>, d<, d>=, d<=, d=, and d/=.
-
-The time in seconds between two dates can be obtained with d-delta :
-
-    > (d-delta date1 date2)
-    10
-
-The "military" time (hours\*100+minutes). I have added seconds/100 for precision :
-
-    > (miltime (date :ut 3506915075))
-    804.35
-
-The week of the month :
-
-    > (date-wom (date :ut 3506915075))
-    3
-
-The week of the year :
-
-    > (date-week (date :ut 3506915075))
-
-The date in Year-Month-Day format :
-
-    > (y-m-d (date :ut 3506915075))
-
 Get a Common-Lisp universal time (equivalent to get-universal-time)
     > (ut)
     3506915075
@@ -405,3 +345,11 @@ Get a Common-Lisp universal time (equivalent to get-universal-time)
 Get the Common-Lisp universal time corresponding to a string (uses GNU date)
     > (ut "now")
     3506915075
+
+Get a simple-date timestamp
+    > (now)
+    #<TIMESTAMP 30-07-2014T18:33:40>
+
+Get a simple-date timestamp, with miliseconds
+    > (now+)
+    #<TIMESTAMP 30-07-2015T18:33:43,086>
