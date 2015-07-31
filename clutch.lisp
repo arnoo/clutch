@@ -333,10 +333,6 @@
   `(loop while ,test
          do (progn ,@body)))
 
-(defun ? (test)
-  "Returns nil if <test> evaluates to nil, t otherwise"
-  (if test t nil))
-
 (defun vector-to-list* (object)
   (declare (optimize speed))
   (let ((result (list nil))
