@@ -843,8 +843,11 @@
 
 (defun mkdir (dir)
   "Creates directory <dir>"
-  (awith (make-pathname :directory `(,(if (char= {dir 0} #\/) :absolute :relative) ,dir))
-    (ensure-directories-exist it)
+  (awith (make-pathname :directory (if (char= {dir 0} #\/) ; FIXME: make this work on windows
+                                       `(:absolute ,{dir 1 -1})
+                                       `(:relative ,dir)))
+    (loop for path on (reverse (split "/" (str it)))
+          do (ensure-directories-exist (join "/" (reverse path))))
     it))
 
 (defun rmdir (dir)
