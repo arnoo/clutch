@@ -31,8 +31,6 @@
              #:time-max
              #:time-incf
              #:time-decf
-             #:unix-to-ut
-             #:ut-to-unix
              ))
 
 (in-package :clutch-date)
@@ -116,15 +114,6 @@
   (multiple-value-bind (sec usec) (gettimeofday)
     (time-add (universal-time-to-timestamp (unix-to-ut sec))
               (encode-interval :millisecond (round (/ usec 1000))))))
-
-(defvar *unix-epoch-difference*
-  (encode-universal-time 0 0 0 1 1 1970 0))
-
-(defun ut-to-unix (universal-time)
-  (- universal-time *unix-epoch-difference*))
-
-(defun unix-to-ut (unix-time)
-  (+ unix-time *unix-epoch-difference*))
 
 (defun time-max (&rest times)
   (first (sort times 'time>)))

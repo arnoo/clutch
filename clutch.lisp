@@ -22,6 +22,7 @@
               #:in #:group #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend
               #:while #:awhile #:awith #:rlambda #:acond
               #:if-bind #:when-bind #:while-bind #:aif #:awhen #:aand #:it
+              #:unix-to-ut #:ut-to-unix
               #:str #:lc #:uc #:ucfirst #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:trim #:lpad #:rpad #:strip #:lines #:str-replace
               #:gulp #:ungulp #:gulplines #:with-each-fline #:mapflines #:file-lines #:filesize 
               #:f= #:f/= #:f> #:f< #:f<= #:f>= #:f-equal #:with-temporary-file
@@ -29,7 +30,7 @@
               #:keys #:kvalues #:email-error
               #:md5 #:sha1 #:sha256 #:uuid
               #:memoize #:disk-store #:hash-store  #:before #:after #:o 
-              #:d-b
+              #:d-b #:ut
               #:xor #:?)
     (:import-from #:anaphora #:aif #:awhen #:it #:aand)
     #-abcl (:export #:getenv))
@@ -925,6 +926,15 @@
 
 (defun ut ()
   (get-universal-time))
+
+(defvar *unix-epoch-difference*
+  (encode-universal-time 0 0 0 1 1 1970 0))
+
+(defun ut-to-unix (universal-time)
+  (- universal-time *unix-epoch-difference*))
+
+(defun unix-to-ut (unix-time)
+  (+ unix-time *unix-epoch-difference*))
 
 (defmacro d-b (pattern values &body body)
   `(destructuring-bind ,pattern ,values ,@body))
