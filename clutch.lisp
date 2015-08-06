@@ -139,6 +139,9 @@
    (defmethod access ((object hash-table) start &rest args)
       (gethash start object))
 
+   (defmethod access ((object pathname) start &rest args)
+      (access (str object) start (car args)))
+
    (defmethod access ((object standard-object) start &rest args)
       (slot-value object (symb start)))
 
