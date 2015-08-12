@@ -26,11 +26,11 @@
               #:str #:lc #:uc #:ucfirst #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:trim #:lpad #:rpad #:strip #:lines #:str-replace
               #:gulp #:ungulp #:gulplines #:with-each-fline #:mapflines #:file-lines #:filesize 
               #:f= #:f/= #:f> #:f< #:f<= #:f>= #:f-equal #:with-temporary-file
-              #:sh #:ls #:argv #:mkhash #:rm #:rmdir #:mkdir #:probe-dir #:getenv #:grep
+              #:sh #:ls #:argv #:exit #:mkhash #:rm #:rmdir #:mkdir #:probe-dir #:getenv #:grep
               #:keys #:kvalues #:email-error
               #:md5 #:sha1 #:sha256 #:uuid
               #:memoize #:disk-store #:hash-store  #:before #:after #:o 
-              #:d-b #:ut
+              #:d-b #:m-v-b #:ut
               #:xor #:?)
     (:import-from #:anaphora #:aif #:awhen #:it #:aand)
     #-abcl (:export #:getenv))
@@ -149,8 +149,7 @@
       (slot-value object (symb start)))
    
    (defmacro setaccess (object start &rest args)
-      `(cond ((null ,object) nil)
-             ((and (or (listp ,object) (vectorp ,object)) (numberp ,start))
+      `(cond ((and (or (listp ,object) (vectorp ,object)) (numberp ,start))
                 (let ((end ,(and (cdr args) (car args)))
                       (len (length ,object)))
                    (when (or (> ,start len)
@@ -174,7 +173,9 @@
             ((hash-table-p ,object)
                (setf (gethash ,start ,object) ,(car args)))
             ((or (typep ,object 'structure-object) (typep ,object 'standard-object))
-               (setf (slot-value ,object (symb ,start)) ,(car args)))))
+               (setf (slot-value ,object (symb ,start)) ,(car args)))
+            (t 
+               (error "Object type not supported"))))
 
    (defsetf access setaccess)
 
@@ -280,7 +281,7 @@
 	"Returns t if <seq> contains <obj> (using equality test <test>)"
 	(not (null (position obj seq :test test))))
 
-(defun group (lst fn &key (test #'equal))
+(defun group (fn lst &key (test #'equal))
   (let ((result (make-hash-table :test test)))
     (loop for elt in lst
           for fnelt = (funcall fn elt)
@@ -708,7 +709,7 @@
 (defmacro with-temporary-file ((filename &optional extension) &rest body)
   "Evaluates <body> with a temporary file. <filename> is the variable you want to assign the filename to, and <extension> the extension you want the temporary file to have."
   `(let ((,filename (str "/tmp/highres_" (get-internal-real-time) (random 100) ,(if extension (str "." extension) ""))))
-      (prog1
+      (unwind-protect
          (progn
             ,@body)
          (delete-file ,filename))))
@@ -736,20 +737,30 @@
 ; sh based on run-prog-collect-output from stumpwm (GPL)
 ; note : it might be nice to return (values stdin stdout) ?
 (defun sh (command)
-  "run a command and read its output."
+  "run a command and return its output.(and exit code on some Lisps)"
   ;(asdf:run-program )
   (with-input-from-string (ar command)
-    #+ecl (with-temporary-file (fname) (ext:system (str command " &> '" fname "'")) (gulp fname))
-    #+allegro (with-output-to-string (s) (excl:run-shell-command +shell+ :output s :wait t :input ar))
+    #+ecl (with-temporary-file (fname)
+             (ext:system (str "( " command " ; echo -ne \"\\n$?\" ) &> '" fname "'"))
+             (let* ((output (gulp fname))
+                    (junction (position #\Newline output :from-end t)))
+              (values {output 0 junction}
+                      (read-from-string {output (+ junction 1) -1}))))
+    #+allegro (with-output-to-string (s) (excl:run-shell-command +shell+ :output s :wait t :input ar)) 
     #+clisp   (with-output-to-string (s)
                 (let ((out (ext:run-program "/bin/sh" :arguments () :input ar :wait t :output :stream)))
                   (gulp out)))
     #+cmu     (with-output-to-string (s) (ext:run-program +shell+ () :input ar :output s :error s :wait t))
-    #+sbcl    (with-output-to-string (s) (sb-ext:run-program +shell+ () :input ar :output s :error s :wait t))
+    #+sbcl    (let ((fstr (make-array '(0) :element-type 'base-char :fill-pointer 0 :adjustable t))
+                    (exit-code))
+                (with-output-to-string (s fstr)
+                  (awith (sb-ext:run-program +shell+ () :input ar :output s :error s :wait t)
+                    (setf exit-code (sb-ext:process-exit-code it))))
+                (values fstr exit-code))
     #+ccl     (with-output-to-string (s) (ccl:run-program +shell+ () :wait t :output s :error t :input ar))
     #+abcl    (with-output-to-string (s) (ext:run-shell-command (str +shell+ " -c \"" (~s "/\"/\\\"/g" command) "\"") :output s))
     #-(or allegro clisp cmu sbcl ccl abcl ecl)
-              (error 'not-implemented :proc (list 'pipe-input prog args))))
+              (error 'not-implemented :proc (list 'sh command))))
 
 ; get-env from stumpwm (GPL) (also found in the CL cookbook) 
 #-abcl ;abcl has it predefined
@@ -784,14 +795,37 @@
                  (error 'not-implemented :proc (list '(setf getenv) var)))
 
 ; argv adapted from CL-cookbook
-(defun argv (&optional index)
+(defun argv (&optional offset limit)
   (let ((args (or #+sbcl         sb-ext:*posix-argv*  
                   #+lispworks    system:*line-arguments-list*
                   #+cmu          extensions:*command-line-words*
                   #+ecl          (ext:command-args)
                   #-(or sbcl lispworks cmu ecl) (error 'not-implemented :proc (list 'getenv var)))))
     (awhen args
-       (if index (nth index it) it))))
+       (if offset (access it offset limit) it))))
+
+;Exit adapted from Rob Warnock's  "How to programmatically exit?"
+(defun exit (&optional code)
+      ;; This group from "clocc-port/ext.lisp"
+      #+allegro (excl:exit code)
+      #+clisp (#+lisp=cl ext:quit #-lisp=cl lisp:quit code)
+      #+cmu (ext:quit code)
+      #+cormanlisp (win32:exitprocess code)
+      #+gcl (lisp:bye code)                     ; XXX Or is it LISP::QUIT?
+      #+lispworks (lw:quit :status code)
+      #+lucid (lcl:quit code)
+      #+sbcl (sb-ext:exit :code code)
+      ;; This group from Maxima
+      #+kcl (lisp::bye)                         ; XXX Does this take an arg?
+      #+scl (ext:quit code)                     ; XXX Pretty sure this *does*.
+      #+(or openmcl mcl) (ccl::quit)
+      #+abcl (cl-user::quit)
+      #+ecl (si:quit code)
+      ;; This group from <hebi...@math.uni.wroc.pl>
+      #+poplog (poplog::bye)                    ; XXX Does this take an arg?
+      #-(or allegro clisp cmu cormanlisp gcl lispworks lucid sbcl
+            kcl scl openmcl mcl abcl ecl)
+      (error 'not-implemented :proc (list 'exit code)))
 
 (defun filesize (filepath)
   (with-open-file (s filepath) (file-length s)))
@@ -856,7 +890,7 @@
     (error "Directory '~A' is not empty" dir))
     #+:sbcl(progn (sb-posix:rmdir dir) t)
     #+:abcl(delete-file dir)
-    #-(or :abcl :sbcl) (error "Not implemented"))
+    #-(or :abcl :sbcl) (error 'not-implemented :proc (list 'rmdir dir)))
 
 (defun mkhash (&rest args)
   (let ((hash (make-hash-table :test 'equal)))
