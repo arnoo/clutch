@@ -1081,27 +1081,26 @@
       :expect 4)
   )
 
-  (test-suite ("uuid")
+(test-suite ("uuid")
+  (let* ((hexd "[0-9A-Z]")
+         (ure (str "/" hexd "{8}-" hexd "{4}-" hexd "{4}-" hexd "{4}-" hexd "{12}" "/")))
 
-    (let* ((hexd "[0-9A-Z]")
-           (ure (str "/" hexd "{8}-" hexd "{4}-" hexd "{4}-" hexd "{4}-" hexd "{12}" "/")))
+    (test "uuid default"
+       (? (~ ure (uuid)))
+       :expect t)
 
-      (test "uuid default"
-         (? (~ ure (uuid)))
-         :expect t)
+    (test "uuid v1"
+       (? (~ ure (uuid :v 1)))
+       :expect t)
 
-      (test "uuid v1"
-         (? (~ ure (uuid :v 1)))
-         :expect t)
+    (test "uuid v3"
+       (? (~ ure (uuid :v 3 :ns 'URL :name "name")))
+       :expect t)
 
-      (test "uuid v3"
-         (? (~ ure (uuid :v 3 :ns 'URL :name "name")))
-         :expect t)
+    (test "uuid v4"
+       (? (~ ure (uuid :v 4)))
+       :expect t)
 
-      (test "uuid v4"
-         (? (~ ure (uuid :v 4)))
-         :expect t)
-
-      (test "uuid v5"
-         (? (~ ure (uuid :v 5 :ns 'OID :name "name")))
-         :expect t)))
+    (test "uuid v5"
+       (? (~ ure (uuid :v 5 :ns 'OID :name "name")))
+       :expect t)))

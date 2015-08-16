@@ -834,13 +834,23 @@
   "Returns <path> if <path> leads to a directory, nil otherwise"
   (probe-file (str path "/.")))
 
+(defun ls-simple (path)
+  (let ((result)
+        (pathname (probe-file path)))
+    (osicat:with-directory-iterator (next path)
+      (awhile (next)
+        (push (merge-pathnames it pathname) result)))
+    result))
+
 (defun ls (path &key recursive files-only dirs-only)
   "If <path> is a file, return <path>.
    If <path> is a directory, return its contents, recursively if <recursive>.
    Limit resulting list to files if <files-only> and to directories if <dirs-only>.
    Return nil if <path> is neither a file nor a directory."
+  (when (wild-pathname-p path)
+    (error "ls does not accept wild paths"))
   (if (probe-dir path)
-      (let* ((contents (directory (str path "/*.*")))
+      (let* ((contents (ls-simple path))
              (dirs nil)
              (files nil))
          (remove nil
@@ -888,9 +898,10 @@
   "Deletes directory <dir> if it is empty, signals an error otherwise."
   (if (ls dir)
     (error "Directory '~A' is not empty" dir))
+    #+:ecl(awhen (probe-dir dir) (si:rmdir it))
     #+:sbcl(progn (sb-posix:rmdir dir) t)
     #+:abcl(delete-file dir)
-    #-(or :abcl :sbcl) (error 'not-implemented :proc (list 'rmdir dir)))
+    #-(or :abcl :sbcl :ecl) (error 'not-implemented :proc (list 'rmdir dir)))
 
 (defun mkhash (&rest args)
   (let ((hash (make-hash-table :test 'equal)))
@@ -1124,3 +1135,5 @@
                  (prog1 (apply ,sym args)
                         ,@body)))))))
 
+(defun ? (x)
+  (if x t nil))
