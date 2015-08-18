@@ -538,7 +538,7 @@
 (defun looks-like-file (path-or-stream)
   (not (or (streamp path-or-stream)
            (and (stringp path-or-stream) 
-               (> (length path-or-stream) 5)
+               (>= (length path-or-stream) 7)
                (string-equal {path-or-stream 0 7} "http://")))))
   
 
