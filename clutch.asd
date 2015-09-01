@@ -31,7 +31,7 @@
   :components ((:file "clutch"))
   :depends-on (:cl-ppcre-unicode
                :ironclad
-               :osicat
+               :uiop
                :uuid
                :anaphora
                #-abcl :flexi-streams

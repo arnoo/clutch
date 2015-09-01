@@ -834,14 +834,6 @@
   "Returns <path> if <path> leads to a directory, nil otherwise"
   (probe-file (str path "/.")))
 
-(defun ls-simple (path)
-  (let ((result)
-        (pathname (probe-file path)))
-    (osicat:with-directory-iterator (next path)
-      (awhile (next)
-        (push (merge-pathnames it pathname) result)))
-    result))
-
 (defun ls (path &key recursive files-only dirs-only)
   "If <path> is a file, return <path>.
    If <path> is a directory, return its contents, recursively if <recursive>.
@@ -849,8 +841,8 @@
    Return nil if <path> is neither a file nor a directory."
   (when (wild-pathname-p path)
     (error "ls does not accept wild paths"))
-  (if (probe-dir path)
-      (let* ((contents (ls-simple path))
+  (if-bind (pathname (probe-dir path))
+      (let* ((contents (append (uiop/filesystem:directory-files pathname) (uiop/filesystem:subdirectories pathname)))
              (dirs nil)
              (files nil))
          (remove nil
