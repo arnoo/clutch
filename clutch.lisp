@@ -17,8 +17,8 @@
 ;
 
 (defpackage :clutch
-    (:use     #:cl)
-    (:export  #:enable-arc-lambdas #:enable-brackets #:enable-compose #:defstruct-and-export 
+    (:use     #:cl #:named-readtables)
+    (:export  #:clutch #:defstruct-and-export 
               #:in #:group #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend
               #:while #:awhile #:awith #:rlambda #:acond
               #:if-bind #:when-bind #:while-bind #:aif #:awhen #:aand #:it
@@ -183,13 +183,11 @@
      (declare (ignore char))
      `(access ,@(read-delimited-list #\} stream t)))
    
-   (defun enable-brackets ()
-     (set-macro-character #\{ #'bracket-reader)
-     (set-macro-character #\} (get-macro-character #\) nil)))
-   
-   (enable-brackets))
-
-(eval-when (:compile-toplevel :load-toplevel :execute)
+   (defreadtable brackets
+     (:merge :standard)
+     (:macro-char #\{ #'bracket-reader)
+     (:syntax-from :standard #\) #\})
+     (:case :preserve))
 
    ; **** Lambda expressions a la Arc by Brad Ediger ***
    ; CL-USER> ([+ 1 _] 10)
@@ -211,11 +209,16 @@
                       `(access ,@contents)
                       contents))))
    
-   (defun enable-arc-lambdas ()
-     (set-macro-character #\[ #'square-bracket-reader)
-     (set-macro-character #\] (get-macro-character #\) nil)))
+   (defreadtable arc-lambdas
+     (:merge :standard)
+     (:macro-char #\[ #'square-bracket-reader)
+     (:syntax-from :standard #\) #\])
+     (:case :preserve))
 
-   (enable-arc-lambdas))
+   (defreadtable clutch
+     (:merge arc-lambdas brackets)))
+
+(in-readtable clutch)
 
 (defun lc (&rest object)
   "Converts an object to a lowercase string"

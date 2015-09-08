@@ -34,6 +34,7 @@
                :uiop
                :uuid
                :anaphora
+               :named-readtables
                #-abcl :flexi-streams
                #-abcl :cl-store
                #+sbcl :drakma

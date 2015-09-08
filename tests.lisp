@@ -20,8 +20,9 @@
 (require 'simple-date)
 (require 'cleanser)
 
-(defpackage :clutch-tests (:use #:cl #:clutch #:cleanser #:simple-date #:clutch-date))
+(defpackage :clutch-tests (:use #:cl #:clutch #:cleanser #:simple-date #:clutch-date #:named-readtables))
 (in-package :clutch-tests)
+(in-readtable clutch)
 
 (setf cleanser:*quiet* t)
 
