@@ -17,7 +17,7 @@
 ;
 
 (defpackage :clutch-date
-    (:use    #:cl #:simple-date #:clutch #:cffi)
+    (:use    #:cl #:simple-date #:clutch #:cffi #:named-readtables)
     (:export #:ut
              #:now
              #:now+
@@ -34,6 +34,7 @@
              ))
 
 (in-package :clutch-date)
+(in-readtable clutch)
 
 (defvar +months-abbr+ (list "" "Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec"))
 (defvar +months+ (list "" "January" "February" "March" "April" "May" "June" "July" "August" "September" "October" "November" "December"))
