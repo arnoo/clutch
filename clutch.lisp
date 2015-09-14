@@ -918,7 +918,8 @@
           (loop for i from 0 below (length o) by 2 collect {o i}))
         ((and (listp o) (consp {o 0}))
           (mapcar #'car o))
-        ((subtypep (type-of o) 'structure-object)
+        ((or (subtypep (type-of o) 'structure-object)
+             (subtypep (type-of o) 'standard-object))
           (slot-names (class-of o)))
         (t nil)))
 
