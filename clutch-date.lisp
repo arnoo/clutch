@@ -43,7 +43,8 @@
 
 (defmacro with-decoded-timestamp (timestamp &body body)
   `(multiple-value-bind (year month day hour minute second millisecond) 
-                        (decode-timestamp timestamp)
+                        (decode-timestamp ,timestamp)
+     (declare (ignorable year month day hour minute second millisecond))
      ,@body))
 
 (defun date-rfc-3339 (&optional (timestamp (now)))

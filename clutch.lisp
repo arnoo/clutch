@@ -112,6 +112,7 @@
    (defgeneric access (object start &rest args))
 
    (defmethod access ((object null) start &rest args)
+      (declare (ignore args))
       nil)
 
    (defmethod access ((object sequence) (start number) &rest args)
@@ -137,15 +138,18 @@
       (apply object (cons start args)))
 
    (defmethod access ((object hash-table) start &rest args)
+      (declare (ignore args))
       (gethash start object))
 
    (defmethod access ((object pathname) start &rest args)
       (access (str object) start (car args)))
 
    (defmethod access ((object standard-object) start &rest args)
+      (declare (ignore args))
       (slot-value object (symb start)))
 
    (defmethod access ((object structure-object) start &rest args)
+      (declare (ignore args))
       (slot-value object (symb start)))
    
    (defmacro setaccess (object start &rest args)
@@ -448,6 +452,7 @@
         (let ((repl subre))
           (setf subre (lambda (&rest matches)
                         (let ($0 $1 $2 $3 $4 $5 $6 $7 $8 $9)
+                          (declare (ignorable $0 $1 $2 $3 $4 $5 $6 $7 $8 $9))
                           (loop for m in matches
                                 for i from 0
                                 do (setf (symbol-value (symb "$" i)) m))
@@ -835,15 +840,13 @@
 
 (defun probe-dir (path)
   "Returns <path> if <path> leads to a directory, nil otherwise"
-  (probe-file (str path "/.")))
+  (uiop/filesystem:directory-exists-p path))
 
 (defun ls (path &key recursive files-only dirs-only)
   "If <path> is a file, return <path>.
    If <path> is a directory, return its contents, recursively if <recursive>.
    Limit resulting list to files if <files-only> and to directories if <dirs-only>.
    Return nil if <path> is neither a file nor a directory."
-  (when (wild-pathname-p path)
-    (error "ls does not accept wild paths"))
   (if-bind (pathname (probe-dir path))
       (let* ((contents (append (uiop/filesystem:directory-files pathname) (uiop/filesystem:subdirectories pathname)))
              (dirs nil)
@@ -1010,9 +1013,11 @@
    (force-reset :accessor force-reset :initarg :force-reset :initform nil)
    (prefix :accessor prefix :initarg :prefix :initform "")))
 
+(defgeneric memo-disk-fname (store args))
 (defmethod memo-disk-fname ((store disk-store) args)
   (str (dir store) "/" (prefix store) "#" (sha256 (serialize args))))
 
+(defgeneric memo-disk-fre (store))
 (defmethod memo-disk-fre ((store disk-store))
   (str "/\\/" (prefix store) "#[^\\/]+$/"))
 
@@ -1022,15 +1027,18 @@
     (setf (force-reset store) t))
   (when (force-reset store) (mapcar #'rm (~ (memo-disk-fre store) (ls (dir store))))))
 
+(defgeneric memo-store (store key value))
 (defmethod memo-store ((store hash-store) key value)
   (setf {(hash store) key} value)
   value)
 
+(defgeneric memo-store (store key value))
 (defmethod memo-store ((store disk-store) key value)
   (let ((file (memo-disk-fname store key)))
     #+abcl(ungulp file value :readable t) #-abcl(cl-store:store value file))
   value)
 
+(defgeneric memo-rm-entries-older-than (store time))
 (defmethod memo-rm-entries-older-than ((store hash-store) time)
   (loop for call in (keys (hash store))
           do (when (< (cadr {(hash store) call}) time)
@@ -1042,6 +1050,7 @@
         do (when (< (file-write-date f) time)
               (rm f))))
 
+(defgeneric memo-rm-oldest-entries (store keep-nb))
 (defmethod memo-rm-oldest-entries ((store hash-store) keep-nb)
   (when (>= (hash-table-count (hash store)) keep-nb)
       (awith (sort (keys (hash store)) [or (< {{(hash store) _} -2} {{(hash store) __} -2})
@@ -1057,6 +1066,7 @@
          (while (>= (length it) keep-nb)
            (rm (pop it)))))))
 
+(defgeneric memo-get (store key))
 (defmethod memo-get ((store hash-store) key)
   (gethash key (hash store)))
 
@@ -1068,6 +1078,7 @@
                #-abcl(cl-store:restore file))
             existsp)))
 
+(defgeneric memo-rm (store key))
 (defmethod memo-rm ((store hash-store) key)
   (remhash key (hash store)))
 
