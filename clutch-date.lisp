@@ -19,6 +19,7 @@
 (defpackage :clutch-date
     (:use    #:cl #:simple-date #:clutch #:cffi #:named-readtables)
     (:export #:ut
+             #:today
              #:now
              #:now+
              #:y-m-d
@@ -28,6 +29,7 @@
              #:date-unix
              #:miltime
              #:time-min
+             #:time-day
              #:time-max
              #:time-incf
              #:time-decf
@@ -116,6 +118,13 @@
   (multiple-value-bind (sec usec) (gettimeofday)
     (time-add (universal-time-to-timestamp (unix-to-ut sec))
               (encode-interval :millisecond (round (/ usec 1000))))))
+
+(defun today ()
+  (time-day (now)))
+
+(defun time-day (timestamp)
+  (with-decoded-timestamp timestamp
+    (encode-date year month day)))
 
 (defun time-max (&rest times)
   (first (sort times 'time>)))
