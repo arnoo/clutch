@@ -759,7 +759,7 @@
                 (let ((out (ext:run-program "/bin/sh" :arguments () :input ar :wait t :output :stream)))
                   (gulp out)))
     #+cmu     (with-output-to-string (s) (ext:run-program +shell+ () :input ar :output s :error s :wait t))
-    #+sbcl    (let ((fstr (make-array '(0) :element-type 'base-char :fill-pointer 0 :adjustable t))
+    #+sbcl    (let ((fstr (make-array '(0) :element-type 'character :fill-pointer 0 :adjustable t))
                     (exit-code))
                 (with-output-to-string (s fstr)
                   (awith (sb-ext:run-program +shell+ () :input ar :output s :error s :wait t)
