@@ -848,21 +848,13 @@
    Limit resulting list to files if <files-only> and to directories if <dirs-only>.
    Return nil if <path> is neither a file nor a directory."
   (if-bind (pathname (probe-dir path))
-      (let* ((contents (append (uiop/filesystem:directory-files pathname) (uiop/filesystem:subdirectories pathname)))
-             (dirs nil)
-             (files nil))
+      (let* ((dirs (uiop/filesystem:subdirectories pathname))
+             (files (uiop/filesystem:directory-files pathname)))
          (remove nil
-           (if (not (or recursive files-only dirs-only))
-               contents
-               (progn
-                 (loop for subpath in contents
-                       do (if (probe-dir subpath)
-                              (pushend subpath dirs)
-                              (pushend subpath files)))
-                 (flatten (when (not dirs-only) files)
-                          (when (not files-only) dirs)
-                          (when recursive
-                             (mapcar [ls _ :recursive recursive :files-only files-only :dirs-only dirs-only] dirs)))))))
+            (flatten (when (not dirs-only) files)
+                     (when (not files-only) dirs)
+                     (when recursive
+                        (mapcar [ls _ :recursive recursive :files-only files-only :dirs-only dirs-only] dirs)))))
       (if dirs-only
           nil
           (aif (probe-file path) (list it) nil))))
