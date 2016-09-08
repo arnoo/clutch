@@ -356,11 +356,15 @@
 
 (defun parse-re (re)
   (declare (optimize speed))
-  (let ((result (list "")))
+  (let ((result (list ""))
+        (delimiter {re 0})
+        (in-escape nil))
     (loop for i from 1 below (length re)
-          do (if (and (char= {re i} #\/) (char/= {re (- i 1)} {"\\" 0})) 
+          for c = {re i}
+          do (if (and (char= c delimiter) (not in-escape))
                  (push "" result)
-                 (setf (car result) (str (car result) {re i}))))
+                 (setf (car result) (str (car result) c)))
+             (setf in-escape (and (char= c #\\) (not in-escape))))
      (when (= (length result) 2)
        (push "" (cdr result)))
      (when (in (car result) #\i)

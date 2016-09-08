@@ -370,6 +370,10 @@
       (~ "/\\w/g" "bob")
       :expect '(("b") ("o") ("b")))
 
+    (test "Regexp global other delimiter"
+      (~ "#\\w#g" "bob")
+      :expect '(("b") ("o") ("b")))
+
     (test "Regexp group"
       (~ "/(\\w)\\w/g" "bob")
       :expect '(("bo" "b")))
@@ -380,6 +384,10 @@
 
     (test "Regexp subst"
       (~s "/b/a/" "bob")
+      :expect "aob")
+
+    (test "Regexp subst other delimiter"
+      (~s "$b$a$" "bob")
       :expect "aob")
 
     (test "Regexp subst global"
