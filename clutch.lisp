@@ -75,7 +75,9 @@
                 (when l
                   (if (atom l)
                       (pushend l result)
-                      (mapcar #'recurse l))))
+                      (if (listp (cdr l))
+                          (mapcar #'recurse l)
+                          (recurse (cons (car l) (list (cdr l))))))))
              lst)
     result))
 
