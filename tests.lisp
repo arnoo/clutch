@@ -273,6 +273,42 @@
     {"abc" 0 nil}
     :expect #\a)
 
+  (test "Curly brackets reader plist"
+    {(list :a 1 :b 2) :a}
+    :expect 1)
+
+  (test "Curly brackets reader plist 2"
+    {(list :a 1 :b 2) :c}
+    :expect nil)
+
+  (test "Curly brackets reader plist 3 (non keyword indicators)"
+    {(list 'a 1 'b 2) 'a}
+    :expect 1)
+
+  (test "Curly brackets reader plist 4 (non symbol indicators)"
+    {(list 0 1 2 3) 2}
+    :expect 2)
+
+  (test "Curly brackets reader plist 4 (non symbol indicators with :as :plist)"
+    {(list 0 1 2 3) 2 :as :plist}
+    :expect 3)
+
+  (test "Curly brackets reader alist"
+    {(list (cons :a 1) (cons :b 2)) :a}
+    :expect 1)
+
+  (test "Curly brackets reader alist 2"
+    {(list (cons :a 1) (cons :b 2)) :c}
+    :expect nil)
+
+  (test "Curly brackets reader aist 3 (non symbol indicators)"
+    {(list (cons 0 1) (cons 2 3)) 0}
+    :expect (cons 0 1))
+
+  (test "Curly brackets reader plist 4 (non symbol indicators with :as :plist)"
+    {(list (cons 0 1) (cons 2 3)) 0 :as :alist}
+    :expect 1)
+
   (test "Curly brackets reader function"
     {(lambda (x) (+ x 1)) 1}
     :expect 2)
@@ -284,16 +320,64 @@
     :expect 5)
 
   (test "Curly brackets setter list"
-    (let ((alist (list 1 2 3 4)))
-       (setf {alist 1} 5)
-       alist)
+    (let ((lst (list 1 2 3 4)))
+       (setf {lst 1} 5)
+       lst)
     :expect '(1 5 3 4))
 
   (test "Curly brackets setter list 2"
-      (let ((alist (list 1 2 3 4)))
-         (setf {alist 1 3} (list 5 6))
-         alist)
+      (let ((lst (list 1 2 3 4)))
+         (setf {lst 1 3} (list 5 6))
+         lst)
       :expect '(1 5 6 4))
+
+  (test "Curly brackets setter plist"
+    (let ((plist (list 'a 1 'b 2)))
+       (setf {plist 'c} 5)
+       (getf plist 'c))
+    :expect 5)
+
+  (test "Curly brackets setter plist 2"
+    (let ((plist (list 'a 1 'b 2)))
+       (setf {plist 'a} 5)
+       (getf plist 'a))
+    :expect 5)
+
+  (test "Curly brackets setter plist 3"
+    (let ((plist (list 0 1 2 3)))
+       (setf {plist 0 :as :plist} 5)
+       (getf plist 0))
+    :expect 5)
+
+  (test "Curly brackets setter plist 4"
+    (let ((plist (list 0 1 2 3)))
+       (setf {plist 4 :as :plist} 5)
+       (getf plist 4))
+    :expect 5)
+
+  (test "Curly brackets setter alist"
+    (let ((alist (list (cons 0 1) (cons 2 3))))
+       (setf {alist 0 :as :alist} 5)
+       (cdr (assoc 0 alist)))
+    :expect 5)
+
+  (test "Curly brackets setter alist 2"
+    (let ((alist (list (cons 0 1) (cons 2 3))))
+       (setf {alist 4 :as :alist} 5)
+       (cdr (assoc 4 alist)))
+    :expect 5)
+
+  (test "Curly brackets setter alist 3"
+    (let ((alist (list (cons 'a 1) (cons 'b 3))))
+       (setf {alist 'a} 5)
+       (cdr (assoc 'a alist)))
+    :expect 5)
+  
+  (test "Curly brackets setter alist 4"
+    (let ((alist (list (cons 'a 1) (cons 'b 3))))
+       (setf {alist 'c} 5)
+       (cdr (assoc 'c alist)))
+    :expect 5)
 
   (test "Curly brackets setter string"
     (let ((astring "abc"))
@@ -1004,19 +1088,19 @@
       :expect 2)
 
     (test "keys hash"
-      (keys (mkhash 'a 1 'b 2))
+      (sort (keys (mkhash 'a 1 'b 2)) [string< (str _) (str __)])
       :expect '(a b))
 
     (test "kvalues hash"
-      (kvalues (mkhash 'a 1 'b 2))
+      (sort (kvalues (mkhash 'a 1 'b 2)) #'<)
       :expect '(1 2))
 
     (test "keys struct"
-      (keys (make-test-struct :a "1" :b 2))
+      (sort (keys (make-test-struct :a "1" :b 2)) [string< (str _) (str __)])
       :expect (list 'a 'b 'c))
 
     (test "kvalues struct"
-      (kvalues (make-test-struct :a "1" :b 2))
+      (sort (kvalues (make-test-struct :a "1" :b 2)) #'<)
       :expect (list "1" 2 nil)))
 
 (test-suite ("getenv")

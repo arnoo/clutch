@@ -19,7 +19,7 @@
 (defpackage :clutch
     (:use     #:cl #:named-readtables)
     (:export  #:clutch #:defstruct-and-export 
-              #:in #:group #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend
+              #:in #:group #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend #:alistp #:plistp
               #:while #:awhile #:awith #:rlambda #:acond
               #:if-bind #:when-bind #:while-bind #:aif #:awhen #:aand #:it
               #:unix-to-ut #:ut-to-unix
@@ -111,30 +111,64 @@
    ; > {(make-s :a 1 :b 2) 'a}
    ; > 1
 
+   (defun plistp (o)
+     "Return t if o could be a property list, nil otherwise"
+     (and (listp o)
+          (evenp (length o))
+          (loop for key in o by #'cddr
+                unless (atom key)
+                return nil
+                finally (return t))))
+   
+   (defun alistp (o)
+     "Return t if o is an association list, nil otherwise"
+     (and (listp o)
+          (every #'consp o)))
+
    (defgeneric access (object start &rest args))
 
    (defmethod access ((object null) start &rest args)
       (declare (ignore args))
       nil)
 
+   (defun access-list-special (object start &rest args)
+      (cond ((alistp object)
+               (cdr (assoc start object :test (or (and (evenp (length args)) (getf args :test)) #'eql))))
+            ((or (plistp object) 
+                 (and (evenp (length args))
+                      (eq (getf args :as) :plist)))
+               (getf object start))
+            (t
+               (error "Trying to 'access' as plist or alist a list that is neither"))))
+
    (defmethod access ((object sequence) (start number) &rest args)
-      (let ((end (if args (car args) nil))
-            (len (length object)))
-        (when (or (if end (> start len)
-                          (>= start len))
-                  (and (minusp start)
-                       (or (if end (< start (- (- len) 1)) (< start (- len))))))
-          (error (str (when end "First ") "Index out of bounds")))
-        (if end
-            (if (or (> end len)
-                    (and (minusp end)
-                         (< end (- -1 len))))
-              (error "Second index out of bounds")
-              (subseq object (if (minusp start) (+ len 1 start)
-                                 start)
-                             (if (minusp end) (+ len 1 end)
-                                 end)))
-            (elt object (mod start len)))))
+      (if (and (evenp (length args))
+               (or (eq (getf args :as) :plist)
+                   (eq (getf args :as) :alist)))
+          (apply #'access-list-special (append (list object start) args))
+          (let ((end (if args (car args) nil))
+                (len (length object)))
+            (when (or (if end (> start len)
+                              (>= start len))
+                      (and (minusp start)
+                          (or (if end (< start (- (- len) 1)) (< start (- len))))))
+              (error (str (when end "First ") "Index out of bounds")))
+            (if end
+                (if (or (> end len)
+                        (and (minusp end)
+                            (< end (- -1 len))))
+                  (error "Second index out of bounds")
+                  (subseq object (if (minusp start) (+ len 1 start)
+                                    start)
+                                (if (minusp end) (+ len 1 end)
+                                    end)))
+                (elt object (mod start len))))))
+
+   (defmethod access ((object list) (start symbol) &rest args)
+      (apply #'access-list-special (append (list object start) args)))
+
+   (defmethod access ((object list) (start string) &rest args)
+      (apply #'access-list-special (append (list object start) args)))
 
    (defmethod access ((object function) start &rest args)
       (apply object (cons start args)))
@@ -154,34 +188,53 @@
       (declare (ignore args))
       (slot-value object (symb start)))
    
+
    (defmacro setaccess (object start &rest args)
-      `(cond ((and (or (listp ,object) (vectorp ,object)) (numberp ,start))
-                (let ((end ,(and (cdr args) (car args)))
-                      (len (length ,object)))
-                   (when (or (> ,start len)
-                             (<= ,start (- len)))
-                        (error "Index out of bounds"))
-                   (if end
-                      (if (or (> end len)
-                              (and (minusp end)
-                                   (< end (- -1 len))))
-                          (error "Second index out of bounds")
-                          (setf (subseq ,object (mod ,start len)
-                                        (if (minusp end) (+ len 1 end)
-                                            end))
-                                ,(cadr args)))
-                      (if (vectorp ,object)
-                          (setf ,object (concatenate (type-of ,object)
-                                                     (access ,object 0 ,start)
-                                                     (make-sequence (append (butlast (type-of ,object)) (list 1)) 1 :initial-element ,(car args))
-                                                     (access ,object (+ ,start 1) -1)))
-                          (setf (elt ,object (mod ,start len)) ,(car args))))))
-            ((hash-table-p ,object)
-               (setf (gethash ,start ,object) ,(car args)))
-            ((or (typep ,object 'structure-object) (typep ,object 'standard-object))
-               (setf (slot-value ,object (symb ,start)) ,(car args)))
-            (t 
-               (error "Object type not supported"))))
+      `(cond  
+          ((and (or (listp ,object) (vectorp ,object))
+                (numberp ,start)
+                (not (and (oddp ,(length args))
+                          (or (eq (getf (list ,@(butlast args)) :as) :plist)
+                              (eq (getf (list ,@(butlast args)) :as) :alist)))))
+             (let ((end (and (cdr (list ,@args)) (car (list ,@args))))
+                   (len (length ,object)))
+                (when (or (> ,start len)
+                          (<= ,start (- len)))
+                     (error "Index out of bounds"))
+                (if end
+                   (if (or (> end len)
+                           (and (minusp end)
+                                (< end (- -1 len))))
+                       (error "Second index out of bounds")
+                       (setf (subseq ,object (mod ,start len)
+                                     (if (minusp end) (+ len 1 end)
+                                         end))
+                             ,(cadr args)))
+                   (if (vectorp ,object)
+                       (setf ,object (concatenate (type-of ,object)
+                                                  (access ,object 0 ,start)
+                                                  (make-sequence (append (butlast (type-of ,object)) (list 1)) 1 :initial-element ,(car args))
+                                                  (access ,object (+ ,start 1) -1)))
+                       (setf (elt ,object (mod ,start len)) ,(car args))))))
+          ((or (and (plistp ,object) (not (numberp ,start)))
+               (and (oddp ,(length args))
+                    (eq (getf (list ,@(butlast args)) :as) :plist)))
+             (setf (getf ,object ,start) ,(car (last args))))
+          ((or (and (alistp ,object) (not (numberp ,start)))
+               (and (oddp ,(length args))
+                    (eq (getf (list ,@(butlast args)) :as) :alist)))
+             (let ((done nil))
+               (loop for c in ,object
+                     when (eql (car c) ,start)
+                     do (rplacd (assoc ,start ,object) ,(car (last args))))
+               (unless done
+                  (pushend (cons ,start ,(car (last args))) ,object))))
+          ((hash-table-p ,object)
+             (setf (gethash ,start ,object) ,(car args)))
+          ((or (typep ,object 'structure-object) (typep ,object 'standard-object))
+             (setf (slot-value ,object (symb ,start)) ,(car args)))
+          (t 
+             (error "Object type not supported"))))
 
    (defsetf access setaccess)
 
@@ -347,6 +400,7 @@
 
 (defun vector-to-list* (object)
   (declare (optimize speed))
+  (declare (type vector object)) 
   (let ((result (list nil))
         (length (length object)))
     (declare (fixnum length))
@@ -915,9 +969,10 @@
 (defun keys (o)
   (cond ((hash-table-p o)
           (loop for k being each hash-key of o collect k))
-        ((and (listp o) (symbolp {o 0}) (evenp (length o)))
-          (loop for i from 0 below (length o) by 2 collect {o i}))
-        ((and (listp o) (consp {o 0}))
+        ((plistp o)
+          (loop for i in o by #'cddr
+                collect i))
+        ((alistp o)
           (mapcar #'car o))
         ((or (subtypep (type-of o) 'structure-object)
              (subtypep (type-of o) 'standard-object))
