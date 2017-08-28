@@ -292,13 +292,16 @@
   (let ((strd (str object)))
     (str (uc {strd 0}) {strd 1 -1})))
 
-(defun split (sep seq)
+(defun split (sep seq &key limit)
   (if (= (length sep) 0)
       (mapcar #'str (coerce seq 'list))
-      (loop for start = 0 then (+ end (length sep))
+      (loop for collected from 0
+            for start = 0 then (+ end (length sep))
             for end = (search sep seq :start2 start)
             collecting (subseq seq start (or end (length seq)))
-            while end)))
+            while (and (or (not limit)
+                           (< collected limit))
+                       end))))
 
 (defun o (&rest fns)
   "Compose functions <fns>"
