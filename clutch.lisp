@@ -719,6 +719,8 @@
                 (limit ,limit))
             (when (and limit (< limit 0))
               (error "Limit must be a positive integer (number of lines)"))
+            (when (and limit (= limit 0))
+              (return-from read-loop 0))
             (when (and (not (looks-like-file ,path-or-stream))
                        (< offset 0))
               ; we have to read the whole thing
