@@ -554,15 +554,10 @@
 (defun lines (str)
   (resplit "/\\r\\n|\\n/" str))
 
-(defun join (join-seq &rest seq-lists)
-  (awith (flatten seq-lists)
-    (if (cdr it)
-        (concatenate (class-of (car it)) (car it) 
-                     (if (subtypep (type-of join-seq) 'sequence)
-                         join-seq
-                         (make-sequence (class-of (car it)) 1 :initial-element join-seq))
-                     (join join-seq (cdr it)))
-        (car it))))
+(defun join (delimiter &rest lists)
+  (format nil
+          (str "~{~A~^" delimiter "~}")
+          (flatten lists)))
 
 (defun x (seq nb)
   "returns a sequence composed of <nb> times <sequence>
