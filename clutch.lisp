@@ -690,7 +690,7 @@
 (defun file-lines (file)
   (let ((total 0))
     (with-open-file (file-stream file)
-      (do ((it (read-line file-stream) (read-line file-stream nil 'eof)))
+      (do ((it (read-line file-stream nil 'eof) (read-line file-stream nil 'eof)))
           ((eq it 'eof) (values))
           (incf total)))
     total))
@@ -742,7 +742,7 @@
                 (let ((skipped-lines 0)
                       (done-lines 0)
                       (,nbsymb offset))
-                  (do ((,linesymb (read-line s) (read-line s nil 'eof)))
+                  (do ((,linesymb (read-line s nil 'eof) (read-line s nil 'eof)))
                       ((eq ,linesymb 'eof) (values))
                       (if (>= skipped-lines offset)
                         (progn
