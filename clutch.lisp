@@ -788,9 +788,9 @@
                   (t            (pushend (list (probe-file path) @it matches) result))))))
         result)))
 
-(defmacro with-temporary-file ((filename &optional extension) &rest body)
+(defmacro with-temporary-file ((filename &optional extension basename) &rest body)
   "Evaluates <body> with a temporary file. <filename> is the variable you want to assign the filename to, and <extension> the extension you want the temporary file to have."
-  `(let ((,filename (str "/tmp/highres_" (get-internal-real-time) (random 100) ,(if extension (str "." extension) ""))))
+  `(let ((,filename (str "/tmp/" (or ,basename "clutch") "_" (get-internal-real-time) (random 100) (if ,extension (str "." ,extension) ""))))
       (unwind-protect
          (progn
             ,@body)
@@ -994,6 +994,7 @@
         (t nil)))
 
 (defun kvalues (o)
+  "Returns the values of a key-value structure (hash, plist...)"
   (apply #'pick (append (list o) (keys o))))
 
 (defmacro defstruct-and-export (structure &rest members)
