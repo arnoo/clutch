@@ -19,11 +19,12 @@
 (defpackage :clutch
     (:use     #:cl #:named-readtables)
     (:export  #:clutch #:defstruct-and-export 
-              #:in #:group #:range #:vector-to-list* #:flatten #:pick #:pushend #:pushendnew #:popend #:alistp #:plistp
-              #:while #:awhile #:awith #:rlambda #:acond
+              #:keyw #:num #:str #:symb #:vector-to-list* 
+              #:in #:group #:range #:flatten #:pick #:pushend #:pushendnew #:popend #:alistp #:plistp
+              #:while #:awhile #:awith #:rlambda #:acond #:asetf
               #:if-bind #:when-bind #:while-bind #:aif #:awhen #:aand #:it
               #:unix-to-ut #:ut-to-unix
-              #:str #:lc #:uc #:ucfirst #:symb #:keyw #:~ #:~s #:/~ #:resplit #:split #:join #:x #:trim #:lpad #:rpad #:strip #:lines #:str-replace
+              #:lc #:uc #:ucfirst #:~ #:~s #:/~ #:resplit #:split #:join #:x #:trim #:lpad #:rpad #:strip #:lines #:str-replace
               #:gulp #:ungulp #:gulplines #:with-each-fline #:mapflines #:file-lines #:filesize 
               #:f= #:f/= #:f> #:f< #:f<= #:f>= #:f-equal #:with-temporary-file
               #:sh #:ls #:argv #:exit #:mkhash #:rm #:rmdir #:mkdir #:probe-dir #:getenv #:grep
@@ -368,6 +369,11 @@
                         collect `(awhen ,(car form) (return-from ,blockname (progn ,(cadr form)))))
                     nil)))
 
+(defmacro asetf (place value)
+  "Like a regular setf except the old value can be accessed as <it>"
+  `(let ((it ,place))
+     (setf ,place ,value)))
+
 (defmacro if-bind ((var test) then &optional else)
   "Evaluates <then with <var> bound to result of evaluating <test> if this result is not nil, <else> otherwise"
   `(let ((,var ,test))
@@ -409,6 +415,14 @@
         ((= index length) (cdr result))
       (declare (fixnum index))
       (rplacd splice (list (aref object index))))))
+
+(defun num (object &key int)
+  "Convert <object> to a number"
+  (let ((sobject (str object)))
+    (if (/~ (str "/^\\d+" (if int "" "(\\.\\d+)?") "$/")
+            sobject)
+      (error (str "'" sobject "' cannot be converted to a number")))
+    (read-from-string sobject)))
 
 (defun parse-re (re)
   (declare (optimize speed))
