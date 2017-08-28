@@ -33,6 +33,10 @@
              #:time-max
              #:time-incf
              #:time-decf
+             #:+days+
+             #:+days-abbr+
+             #:+months+
+             #:+months-abbr+
              ))
 
 (in-package :clutch-date)
