@@ -548,8 +548,8 @@
   (declare (optimize speed))
   (mapcar [~s re _ capture-nb] obj))
 
-(defun resplit (re str)
-  (cl-ppcre:split (parse-re re) str))
+(defun resplit (re str &key include-matches)
+  (cl-ppcre:split (parse-re re) str :with-registers-p include-matches))
 
 (defun lines (str)
   (resplit "/\\r\\n|\\n/" str))
